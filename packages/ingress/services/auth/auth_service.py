@@ -1,15 +1,17 @@
+"""
+Authentication Service
+Handles user authentication, JWT tokens, and password management
+"""
+
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from . import models, schemas
-import os
 
-# Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+from services.database.models import User
+from services.database.schemas import UserCreate
+from shared.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -46,11 +48,9 @@ def decode_token(token: str) -> Optional[str]:
         return None
 
 
-def authenticate_user(
-    db: Session, username: str, password: str
-) -> Optional[models.User]:
+def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     """Authenticate a user"""
-    user = db.query(models.User).filter(models.User.username == username).first()
+    user = db.query(User).filter(User.username == username).first()
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
@@ -58,10 +58,10 @@ def authenticate_user(
     return user
 
 
-def create_user(db: Session, user: schemas.UserCreate) -> models.User:
+def create_user(db: Session, user: UserCreate) -> User:
     """Create a new user"""
     hashed_password = get_password_hash(user.password)
-    db_user = models.User(
+    db_user = User(
         username=user.username, email=user.email, hashed_password=hashed_password
     )
     db.add(db_user)
@@ -70,11 +70,11 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     return db_user
 
 
-def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
+def get_user_by_username(db: Session, username: str) -> Optional[User]:
     """Get a user by username"""
-    return db.query(models.User).filter(models.User.username == username).first()
+    return db.query(User).filter(User.username == username).first()
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
     """Get a user by email"""
-    return db.query(models.User).filter(models.User.email == email).first()
+    return db.query(User).filter(User.email == email).first()

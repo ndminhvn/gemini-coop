@@ -1,5 +1,10 @@
+"""
+WebSocket Service
+Manages WebSocket connections and real-time message broadcasting
+"""
+
 from fastapi import WebSocket
-from typing import Dict, List, Set
+from typing import Dict, Set
 import json
 import asyncio
 
@@ -142,4 +147,4 @@ class ConnectionManager:
 
 
 # Singleton instance
-manager = ConnectionManager()
+websocket_manager = ConnectionManager()

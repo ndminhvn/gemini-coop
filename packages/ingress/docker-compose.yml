@@ -1,0 +1,62 @@
+services:
+  # PostgreSQL 17 Database
+  postgres:
+    image: postgres:17
+    container_name: gemini-coop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gemini_user
+      POSTGRES_PASSWORD: gemini_password
+      POSTGRES_DB: gemini_coop
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5433:5432" # External:Internal - avoids conflict with local PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gemini_user -d gemini_coop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gemini-network
+
+  # Backend API Server
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gemini-coop-backend
+    restart: unless-stopped
+    environment:
+      # Database connection (use 'postgres' as host since it's the service name)
+      DATABASE_URL: postgresql://gemini_user:gemini_password@postgres:5432/gemini_coop
+      # Load other env vars from .env file
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SECRET_KEY: ${SECRET_KEY:-default-secret-key-change-in-production}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-8000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gemini-network
+    volumes:
+      # Mount code for development (hot reload)
+      - ./server:/app/server
+      - ./services:/app/services
+      - ./shared:/app/shared
+
+networks:
+  gemini-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

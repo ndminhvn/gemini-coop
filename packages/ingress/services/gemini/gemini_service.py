@@ -1,15 +1,21 @@
+"""
+Gemini AI Service
+Handles integration with Google's Gemini API for AI responses
+"""
+
 from google import genai
 from typing import AsyncGenerator, List, Dict
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+from shared.config import GEMINI_API_KEY, GEMINI_MODEL
 
 
 class GeminiService:
+    """Service for interacting with Gemini API"""
+
     def __init__(self):
-        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        self.model_name = "gemini-2.0-flash-exp"  # Using latest model
+        if not GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY environment variable is required")
+        self.client = genai.Client(api_key=GEMINI_API_KEY)
+        self.model_name = GEMINI_MODEL
 
     async def generate_stream_response(
         self, message: str, history: List[Dict] = None

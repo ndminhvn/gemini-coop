@@ -1,16 +1,11 @@
-from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    DateTime,
-    ForeignKey,
-    Text,
-    Table,
-    Boolean,
-)
+"""
+Database service - Models
+"""
+
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from .database import Base
+from shared.database import Base
 
 
 class User(Base):
