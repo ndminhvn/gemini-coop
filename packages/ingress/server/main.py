@@ -20,6 +20,7 @@ from . import models, schemas, auth, chat_service
 from .database import get_db, init_db
 from .websocket_manager import manager
 from .gemini_service import gemini_service
+from contextlib import asynccontextmanager
 
 load_dotenv()
 
@@ -43,10 +44,25 @@ security = HTTPBearer()
 
 
 # Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app):
     init_db()
     print("Database initialized")
+    try:
+        yield
+    finally:
+        # cleanup on shutdown if needed
+        pass
+
+
+# Attach lifespan to the existing FastAPI app
+app.router.lifespan_context = lifespan
+
+
+# @app.on_event("startup")
+# async def startup_event():
+#     init_db()
+#     print("Database initialized")
 
 
 # Dependency to get current user from token

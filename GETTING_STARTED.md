@@ -16,12 +16,12 @@ Welcome to Gemini Coop! This guide will help you get up and running quickly.
 
 ### Required
 
-- **Python 3.8+** - [Download](https://www.python.org/downloads/)
+- **Python 3.13+** - [Download](https://www.python.org/downloads/)
 - **Gemini API Key** - [Get one here](https://makersuite.google.com/app/apikey)
 
 ### Optional (for frontend development)
 
-- **Node.js 18+** - [Download](https://nodejs.org/)
+- **Node.js 22+** - [Download](https://nodejs.org/)
 - **pnpm** - Install with `npm install -g pnpm`
 
 ## Quick Start
