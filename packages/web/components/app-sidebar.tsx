@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ArchiveX, Command, File, Inbox, Send, Trash2 } from "lucide-react";
+import { Command, File, Inbox, Trash2, SquarePen } from "lucide-react";
 
 import { NavUser } from "@/components/nav-user";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -18,7 +18,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Switch } from "@/components/ui/switch";
+
 
 // This is sample data
 const data = {
@@ -35,21 +35,9 @@ const data = {
       isActive: true,
     },
     {
-      title: "Drafts",
+      title: "Unread",
       url: "#",
       icon: File,
-      isActive: false,
-    },
-    {
-      title: "Sent",
-      url: "#",
-      icon: Send,
-      isActive: false,
-    },
-    {
-      title: "Junk",
-      url: "#",
-      icon: ArchiveX,
       isActive: false,
     },
     {
@@ -223,15 +211,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       {/* We disable collapsible and let it fill remaining space */}
       <Sidebar collapsible="none" className="hidden flex-1 md:flex">
         <SidebarHeader className="gap-3.5 border-b p-4">
-          <div className="flex w-full items-center justify-between">
-            <div className="text-foreground text-base font-medium">
-              {activeItem?.title}
+            <div className="flex w-full items-center justify-between">
+              <div className="text-foreground text-base font-medium">
+                {activeItem?.title}
+              </div>
+              <Button
+                size="icon"
+                className="h-8 w-8 bg-transparent text-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                onClick={() => {
+                  console.log("Create new chat");
+                }}
+              >
+                <SquarePen className="h-4 w-4" />
+              </Button>
             </div>
-            <Label className="flex items-center gap-2 text-sm">
-              <span>Unreads</span>
-              <Switch className="shadow-none" />
-            </Label>
-          </div>
           <SidebarInput placeholder="Type to search..." />
         </SidebarHeader>
         <SidebarContent>
