@@ -1,0 +1,25 @@
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+include = '\.pyi?$'
+skip-string-normalization = true ## stops black from replacing single quotes with double quotes. doesn't replace double quotes with single quotes.
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.nox
+  | \.tox
+  | \.venv
+  | \.env
+  | env
+  | venv
+  | node_modules
+  | _build
+  | buck-out
+  | build
+  | dist
+  | migrations
+)/
+'''

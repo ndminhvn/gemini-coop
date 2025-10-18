@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+pip-log.txt
+pip-delete-this-arg.txt
+
+# Editor/OS specific
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+._*
+
+# FastAPI specific
+.env
+.env.*
+# If you have specific log files or database files to ignore
+logs/
+*.sqlite3

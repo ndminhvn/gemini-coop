@@ -1,0 +1,21 @@
+{
+  "name": "gemini-coop",
+  "version": "1.0.0",
+  "description": "Gemini chat app for collaborative work",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "dev": "pnpm --parallel --recursive dev",
+    "build": "pnpm --recursive build",
+    "test": "pnpm --recursive test",
+    "lint": "pnpm --recursive lint",
+    "lint:fix": "pnpm --recursive lint:fix",
+    "format": "pnpm --recursive format",
+    "format:check": "pnpm --recursive format:check",
+    "clean": "pnpm --recursive clean"
+  },
+  "keywords": [],
+  "author": "ndminhvn",
+  "license": "ISC",
+  "packageManager": "pnpm@10.15.1"
+}
