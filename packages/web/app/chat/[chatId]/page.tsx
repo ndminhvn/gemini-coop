@@ -84,8 +84,8 @@ export default function ChatPage() {
   };
 
   return (
-    <>
-      <header className="bg-background sticky top-0 flex shrink-0 items-center gap-2 border-b p-4">
+    <div className="flex h-screen flex-col">
+      <header className="bg-background flex shrink-0 items-center gap-2 border-b p-4">
         <SidebarTrigger className="-ml-1" />
         <Separator
           orientation="vertical"
@@ -104,9 +104,9 @@ export default function ChatPage() {
         </Breadcrumb>
       </header>
 
-      {/* Messages Area */}
-      <div className="flex flex-1 flex-col">
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      {/* Messages Area - Scrollable */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+        <div className="flex-1 space-y-4 overflow-y-auto">
           {loading ? (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
@@ -142,30 +142,30 @@ export default function ChatPage() {
             ))
           )}
         </div>
-
-        {/* Message Input*/}
-        <div className="border-t p-4">
-          <form onSubmit={sendMessage} className="flex gap-2">
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message... (use /bot for AI)"
-              disabled={sending}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={sending || !newMessage.trim()}>
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
-          <p className="text-muted-foreground mt-2 text-xs">
-            Tip: Use{" "}
-            <code className="bg-muted rounded px-1.5 py-0.5">
-              /bot &lt;message&gt;
-            </code>{" "}
-            to chat with Gemini AI
-          </p>
-        </div>
       </div>
-    </>
+
+      {/* Message Input */}
+      <div className="shrink-0 border-t p-4">
+        <form onSubmit={sendMessage} className="flex gap-2">
+          <Input
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type a message... (use /bot for AI)"
+            disabled={sending}
+            className="flex-1"
+          />
+          <Button type="submit" disabled={sending || !newMessage.trim()}>
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Tip: Use{" "}
+          <code className="bg-muted rounded px-1.5 py-0.5">
+            /bot &lt;message&gt;
+          </code>{" "}
+          to chat with Gemini AI
+        </p>
+      </div>
+    </div>
   );
 }
