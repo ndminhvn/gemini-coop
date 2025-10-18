@@ -17,7 +17,7 @@ cp .env.example .env
 # Edit .env and add your GEMINI_API_KEY
 
 # 2. Start everything with Docker
-docker compose up --build
+docker compose up --build -d
 
 # 3. Done! Access at http://localhost:8000/docs
 ```

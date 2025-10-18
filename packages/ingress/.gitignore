@@ -29,7 +29,7 @@ pip-delete-this-arg.txt
 
 # FastAPI specific
 .env
-.env.*
+# .env.*
 # If you have specific log files or database files to ignore
 logs/
 *.sqlite3
