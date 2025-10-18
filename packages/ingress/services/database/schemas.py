@@ -44,6 +44,8 @@ class TokenData(BaseModel):
 class ChatCreate(BaseModel):
     name: Optional[str] = None
     is_group: bool = False
+    is_ai_chat: bool = False  # True if this is a private AI chat
+    participant_usernames: Optional[List[str]] = None  # Usernames to invite
 
 
 class ChatInvite(BaseModel):

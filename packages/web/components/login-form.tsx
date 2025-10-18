@@ -139,6 +139,7 @@ export function LoginForm({
                       href="#"
                       className="ml-auto text-sm underline-offset-4 hover:underline"
                       onClick={(e) => e.preventDefault()}
+                      tabIndex={-1}
                     >
                       Forgot your password?
                     </a>

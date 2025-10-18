@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await authAPI.getCurrentUser();
       setUser(userData);
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Redirect to chat page
+      router.push("/chat");
     } catch (error) {
       console.error("Login failed:", error);
       throw error;

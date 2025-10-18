@@ -11,9 +11,17 @@ from services.database.models import Chat, ChatParticipant, Message, User
 
 
 def create_chat(
-    db: Session, owner_id: int, name: Optional[str] = None, is_group: bool = False
+    db: Session,
+    owner_id: int,
+    name: Optional[str] = None,
+    is_group: bool = False,
+    is_ai_chat: bool = False,
 ) -> Chat:
     """Create a new chat"""
+    # Auto-generate name for AI chats if not provided
+    if is_ai_chat and not name:
+        name = "AI Chat"
+
     chat = Chat(owner_id=owner_id, name=name, is_group=is_group)
     db.add(chat)
     db.commit()

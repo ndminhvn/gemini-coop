@@ -157,7 +157,29 @@ async def create_chat_endpoint(
     db: Session = Depends(get_db),
 ):
     """Create a new chat"""
-    return create_chat(db, current_user.id, chat.name, chat.is_group)
+    # Create the chat
+    new_chat = create_chat(
+        db, current_user.id, chat.name, chat.is_group, chat.is_ai_chat
+    )
+
+    # Add additional participants if provided
+    if chat.participant_usernames:
+        for username in chat.participant_usernames:
+            invited_user = get_user_by_username(db, username)
+            if invited_user:
+                add_participant(db, new_chat.id, invited_user.id)
+
+    # If it's an AI chat, send an initial greeting message
+    if chat.is_ai_chat:
+        create_message(
+            db,
+            chat_id=new_chat.id,
+            content="Hello! I'm your AI assistant. How can I help you today?",
+            user_id=None,
+            is_bot=True,
+        )
+
+    return new_chat
 
 
 @app.get("/api/chats", response_model=List[ChatResponse])

@@ -39,6 +39,8 @@ export interface ChatWithParticipants extends Chat {
 export interface CreateChatRequest {
   name?: string;
   is_group: boolean;
+  is_ai_chat?: boolean;
+  participant_usernames?: string[];
 }
 
 export interface InviteUserRequest {
