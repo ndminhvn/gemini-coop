@@ -85,7 +85,7 @@ export function ChatMessage({ message, isCurrentUser }: ChatMessageProps) {
     <MessageContainer
       from={isCurrentUser ? "user" : "assistant"}
       className={cn(
-        "group flex w-full items-end gap-3 py-2",
+        "group flex w-full items-start gap-3 py-2",
         isCurrentUser
           ? "flex-row-reverse justify-start"
           : "flex-row justify-start",
@@ -105,8 +105,8 @@ export function ChatMessage({ message, isCurrentUser }: ChatMessageProps) {
       {/* Message Content */}
       <div
         className={cn(
-          "flex flex-col gap-1",
-          isCurrentUser ? "max-w-[70%]" : "max-w-[70%]",
+          "flex flex-col gap-1 max-w-[50%]",
+          isCurrentUser ? "items-end" : "items-start",
         )}
       >
         {/* Username and timestamp */}
