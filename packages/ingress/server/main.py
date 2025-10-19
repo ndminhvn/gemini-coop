@@ -326,6 +326,155 @@ async def invite_to_chat(
     return {"message": f"User {invite.username} invited to chat"}
 
 
+@app.delete("/api/chats/{chat_id}/participants/{user_id}")
+async def remove_participant_from_chat(
+    chat_id: int,
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove a participant from a chat (admin only)"""
+    # Check if chat exists
+    chat = get_chat(db, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Only chat owner can remove participants
+    if chat.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Only chat admin can remove participants"
+        )
+
+    # Cannot remove yourself
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=400, detail="Cannot remove yourself. Use leave endpoint instead"
+        )
+
+    # Check if user is a participant
+    if not is_participant(db, chat_id, user_id):
+        raise HTTPException(status_code=404, detail="User is not a participant")
+
+    # Remove participant from database
+    from services.database.models import ChatParticipant
+
+    db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id
+    ).delete()
+    db.commit()
+
+    # Notify the removed user
+    await websocket_manager.notify_user(
+        user_id,
+        {
+            "type": "removed_from_chat",
+            "chat_id": chat_id,
+            "notification": f"You were removed from {chat.name or 'a chat'} by {current_user.username}",
+        },
+    )
+
+    # Notify other participants
+    participants = get_chat_participants(db, chat_id)
+    for participant in participants:
+        if participant.id != current_user.id:
+            await websocket_manager.notify_user(
+                participant.id,
+                {
+                    "type": "user_left",
+                    "chat_id": chat_id,
+                    "user_id": user_id,
+                },
+            )
+
+    return {"message": "Participant removed successfully"}
+
+
+@app.post("/api/chats/{chat_id}/leave")
+async def leave_chat(
+    chat_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Leave a chat"""
+    # Check if chat exists
+    chat = get_chat(db, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Cannot leave if you're the owner
+    if chat.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=400, detail="Chat owner cannot leave. Delete the chat instead"
+        )
+
+    # Check if user is a participant
+    if not is_participant(db, chat_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Not a participant")
+
+    # Remove participant from database
+    from services.database.models import ChatParticipant
+
+    db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == current_user.id
+    ).delete()
+    db.commit()
+
+    # Notify other participants
+    participants = get_chat_participants(db, chat_id)
+    for participant in participants:
+        await websocket_manager.notify_user(
+            participant.id,
+            {
+                "type": "user_left",
+                "chat_id": chat_id,
+                "user_id": current_user.id,
+                "notification": f"{current_user.username} left {chat.name or 'the chat'}",
+            },
+        )
+
+    return {"message": "Left chat successfully"}
+
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(
+    chat_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a chat (admin only)"""
+    # Check if chat exists
+    chat = get_chat(db, chat_id)
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    # Only chat owner can delete
+    if chat.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only chat admin can delete chat")
+
+    # Get all participants to notify them
+    participants = get_chat_participants(db, chat_id)
+
+    # Delete chat (cascade will handle related records)
+    from services.database.models import Chat
+
+    db.query(Chat).filter(Chat.id == chat_id).delete()
+    db.commit()
+
+    # Notify all participants
+    for participant in participants:
+        if participant.id != current_user.id:
+            await websocket_manager.notify_user(
+                participant.id,
+                {
+                    "type": "chat_deleted",
+                    "chat_id": chat_id,
+                    "notification": f"{chat.name or 'Chat'} was deleted by {current_user.username}",
+                },
+            )
+
+    return {"message": "Chat deleted successfully"}
+
+
 @app.get("/api/chats/{chat_id}/messages", response_model=List[MessageResponse])
 async def get_messages(
     chat_id: int,

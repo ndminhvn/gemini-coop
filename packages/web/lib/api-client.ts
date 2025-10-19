@@ -150,6 +150,30 @@ export const chatAPI = {
     >(`/api/chats/${chatId}/read-receipts`);
     return response.data;
   },
+
+  async removeParticipant(
+    chatId: number,
+    userId: number,
+  ): Promise<{ message: string }> {
+    const response = await axiosInstance.delete<{ message: string }>(
+      `/api/chats/${chatId}/participants/${userId}`,
+    );
+    return response.data;
+  },
+
+  async leaveChat(chatId: number): Promise<{ message: string }> {
+    const response = await axiosInstance.post<{ message: string }>(
+      `/api/chats/${chatId}/leave`,
+    );
+    return response.data;
+  },
+
+  async deleteChat(chatId: number): Promise<{ message: string }> {
+    const response = await axiosInstance.delete<{ message: string }>(
+      `/api/chats/${chatId}`,
+    );
+    return response.data;
+  },
 };
 
 // ============= WebSocket Helper =============

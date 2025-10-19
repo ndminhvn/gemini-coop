@@ -6,14 +6,17 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Send, Paperclip, X } from "lucide-react";
+import { Send, Paperclip, X, Info } from "lucide-react";
 import { chatAPI, apiClient } from "@/lib/api-client";
-import type { Chat, Message, WSMessage, ReadReceipt } from "@/lib/types";
+import type { Chat, Message, WSMessage, ReadReceipt, User } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
 import { useWebSocket } from "@/contexts/websocket-context";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatAvatar } from "@/components/chat-avatar";
 import { ReadReceipts } from "@/components/read-receipts";
+import { ChatInfoPanel } from "@/components/chat-info-panel";
+import { TypingIndicator } from "@/components/typing-indicator";
+import { InviteUserDialog } from "@/components/invite-user-dialog";
 
 export default function ChatPage() {
   const params = useParams();
@@ -28,17 +31,22 @@ export default function ChatPage() {
 
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [participants, setParticipants] = useState<User[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [readReceipts, setReadReceipts] = useState<
     Record<number, ReadReceipt[]>
   >({});
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if AI bot is present in this chat (any message from bot)
   const hasAIBot = messages.some((msg) => msg.is_bot);
@@ -71,14 +79,17 @@ export default function ChatPage() {
   useEffect(() => {
     const loadChatData = async () => {
       try {
-        const [chatData, messagesData, receiptsData] = await Promise.all([
-          apiClient.get<Chat>(`/api/chats/${chatId}`),
-          apiClient.get<Message[]>(`/api/chats/${chatId}/messages`),
-          chatAPI.getReadReceipts(parseInt(chatId)),
-        ]);
+        const [chatData, messagesData, receiptsData, participantsData] =
+          await Promise.all([
+            apiClient.get<Chat>(`/api/chats/${chatId}`),
+            apiClient.get<Message[]>(`/api/chats/${chatId}/messages`),
+            chatAPI.getReadReceipts(parseInt(chatId)),
+            chatAPI.getParticipants(parseInt(chatId)),
+          ]);
         setChat(chatData);
         setMessages(messagesData);
         setReadReceipts(receiptsData);
+        setParticipants(participantsData);
 
         // Mark chat as read when opening it
         try {
@@ -181,6 +192,23 @@ export default function ChatPage() {
         if (wsMessage.chat_id === parseInt(chatId)) {
           setReadReceipts(wsMessage.read_receipts);
         }
+      } else if (wsMessage.type === "typing") {
+        // Handle typing indicator
+        if (wsMessage.chat_id === parseInt(chatId) && wsMessage.username) {
+          setTypingUsers((prev) => {
+            if (!prev.includes(wsMessage.username!)) {
+              return [...prev, wsMessage.username!];
+            }
+            return prev;
+          });
+
+          // Remove after 3 seconds
+          setTimeout(() => {
+            setTypingUsers((prev) =>
+              prev.filter((u) => u !== wsMessage.username),
+            );
+          }, 3000);
+        }
       }
     };
 
@@ -206,11 +234,92 @@ export default function ChatPage() {
     setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Send typing indicator (debounced)
+  const handleTyping = () => {
+    if (isConnected && chatId) {
+      // Clear previous timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Send typing event
+      sendWSMessage({
+        type: "typing",
+        chat_id: parseInt(chatId),
+      });
+
+      // Set timeout to stop sending typing after 3 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        // Typing stopped (no need to send stop event, backend will timeout)
+      }, 3000);
+    }
+  };
+
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewMessage(e.target.value);
+    // Send typing indicator
+    handleTyping();
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Submit on Enter (without Shift)
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage(e as any);
+    }
+  };
+
+  // Info panel actions
+  const handleInviteUser = () => {
+    setShowInviteDialog(true);
+  };
+
+  const handleInviteSubmit = async (username: string) => {
+    await chatAPI.inviteUser(parseInt(chatId), { username });
+    // Refresh participants list
+    const updatedParticipants = await chatAPI.getParticipants(parseInt(chatId));
+    setParticipants(updatedParticipants);
+  };
+
+  const handleRemoveUser = async (userId: number) => {
+    try {
+      await chatAPI.removeParticipant(parseInt(chatId), userId);
+      // Refresh participants list
+      const updatedParticipants = await chatAPI.getParticipants(
+        parseInt(chatId),
+      );
+      setParticipants(updatedParticipants);
+    } catch (error) {
+      console.error("Failed to remove user:", error);
+      alert("Failed to remove user from chat");
+    }
+  };
+
+  const handleLeaveChat = async () => {
+    if (confirm("Are you sure you want to leave this chat?")) {
+      try {
+        await chatAPI.leaveChat(parseInt(chatId));
+        router.push("/chat");
+      } catch (error) {
+        console.error("Failed to leave chat:", error);
+        alert("Failed to leave chat");
+      }
+    }
+  };
+
+  const handleDeleteChat = async () => {
+    if (
+      confirm(
+        "Are you sure you want to delete this chat? This action cannot be undone.",
+      )
+    ) {
+      try {
+        await chatAPI.deleteChat(parseInt(chatId));
+        router.push("/chat");
+      } catch (error) {
+        console.error("Failed to delete chat:", error);
+        alert("Failed to delete chat");
+      }
     }
   };
 
@@ -273,191 +382,230 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="bg-background flex shrink-0 items-center gap-2 border-b p-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator
-          orientation="vertical"
-          className="mr-2 data-[orientation=vertical]:h-4"
-        />
-        <ChatAvatar
-          name={chat?.name}
-          isAIChat={hasAIBot}
-          isGroup={chat?.is_group}
-          size="md"
-        />
-        <div className="flex flex-col">
-          <h1 className="text-base font-semibold">
-            {chat?.name || "Loading..."}
-          </h1>
-          {hasAIBot && chat?.is_group && (
-            <p className="text-muted-foreground text-xs">Group Chat with AI</p>
-          )}
-          {hasAIBot && !chat?.is_group && (
-            <p className="text-muted-foreground text-xs">AI Assistant</p>
-          )}
-          {!hasAIBot && chat?.is_group && (
-            <p className="text-muted-foreground text-xs">Group Chat</p>
-          )}
-        </div>
-      </header>
+    <div className="flex h-screen">
+      {/* Main Chat Area */}
+      <div className="flex flex-1 flex-col">
+        <header className="bg-background flex shrink-0 items-center gap-2 border-b p-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator
+            orientation="vertical"
+            className="mr-2 data-[orientation=vertical]:h-4"
+          />
+          <ChatAvatar
+            name={chat?.name}
+            isAIChat={hasAIBot}
+            isGroup={chat?.is_group}
+            size="md"
+          />
+          <div className="flex flex-1 flex-col">
+            <h1 className="text-base font-semibold">
+              {chat?.name || "Loading..."}
+            </h1>
+            {hasAIBot && chat?.is_group && (
+              <p className="text-muted-foreground text-xs">
+                Group Chat with AI
+              </p>
+            )}
+            {hasAIBot && !chat?.is_group && (
+              <p className="text-muted-foreground text-xs">AI Assistant</p>
+            )}
+            {!hasAIBot && chat?.is_group && (
+              <p className="text-muted-foreground text-xs">Group Chat</p>
+            )}
+          </div>
+          {/* Info Panel Toggle Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowInfoPanel(!showInfoPanel)}
+            className={showInfoPanel ? "bg-muted" : ""}
+          >
+            <Info className="h-5 w-5" />
+          </Button>
+        </header>
 
-      {/* Messages Area - Scrollable */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-        <div
-          className="flex-1 space-y-2 overflow-y-auto px-2"
-          ref={messagesContainerRef}
-        >
-          {isLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="text-center">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-                <p className="text-muted-foreground mt-2 text-sm">
-                  Loading messages...
+        {/* Messages Area - Scrollable */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+          <div
+            className="flex-1 space-y-2 overflow-y-auto px-2"
+            ref={messagesContainerRef}
+          >
+            {isLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <div className="text-center">
+                  <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    Loading messages...
+                  </p>
+                </div>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-muted-foreground text-sm">
+                  No messages yet. Start the conversation!
+                </p>
+              </div>
+            ) : (
+              <>
+                {messages.map((message, index) => {
+                  // Find the last message from current user
+                  const lastUserMessageIndex = messages
+                    .map((m, i) => ({ m, i }))
+                    .reverse()
+                    .find(({ m }) => m.user_id === user?.id)?.i;
+
+                  const isLastUserMessage = index === lastUserMessageIndex;
+
+                  return (
+                    <div key={message.id} className="space-y-0">
+                      <ChatMessage
+                        message={message}
+                        isCurrentUser={message.user_id === user?.id}
+                      />
+                      {/* Show read receipts only on the last message from current user */}
+                      {message.user_id === user?.id &&
+                        isLastUserMessage &&
+                        readReceipts[message.id] && (
+                          <div className="flex justify-end px-2">
+                            <ReadReceipts
+                              receipts={readReceipts[message.id]}
+                              currentUserId={user?.id}
+                            />
+                          </div>
+                        )}
+                    </div>
+                  );
+                })}
+                {/* Typing Indicator */}
+                <TypingIndicator typingUsers={typingUsers} />
+                <div ref={messagesEndRef} />
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Message Input */}
+        <div className="shrink-0 border-t p-4">
+          {/* Bot Command Indicator */}
+          {isBotCommand && (
+            <div className="mb-2 flex items-center gap-2 rounded border-l-4 border-l-blue-500 bg-blue-500/10 p-3">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white">
+                <span className="text-xs font-bold">AI</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                  Ask Gemini AI
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {botCommandPreview || "Type your question..."}
                 </p>
               </div>
             </div>
-          ) : messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-muted-foreground text-sm">
-                No messages yet. Start the conversation!
-              </p>
-            </div>
-          ) : (
-            <>
-              {messages.map((message, index) => {
-                // Find the last message from current user
-                const lastUserMessageIndex = messages
-                  .map((m, i) => ({ m, i }))
-                  .reverse()
-                  .find(({ m }) => m.user_id === user?.id)?.i;
-
-                const isLastUserMessage = index === lastUserMessageIndex;
-
-                return (
-                  <div key={message.id} className="space-y-0">
-                    <ChatMessage
-                      message={message}
-                      isCurrentUser={message.user_id === user?.id}
-                    />
-                    {/* Show read receipts only on the last message from current user */}
-                    {message.user_id === user?.id &&
-                      isLastUserMessage &&
-                      readReceipts[message.id] && (
-                        <div className="flex justify-end px-2">
-                          <ReadReceipts
-                            receipts={readReceipts[message.id]}
-                            currentUserId={user?.id}
-                          />
-                        </div>
-                      )}
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </>
           )}
+
+          {/* File attachments preview */}
+          {uploadedFiles.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {uploadedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="bg-muted flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+                >
+                  <Paperclip className="h-4 w-4" />
+                  <span className="max-w-[200px] truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    className="hover:bg-muted-foreground/20 rounded p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={sendMessage} className="flex gap-2">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+              accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json"
+            />
+
+            {/* File upload button */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending || !isConnected}
+              className="shrink-0"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+
+            {/* Message textarea */}
+            <Textarea
+              ref={textareaRef}
+              value={newMessage}
+              onChange={handleMessageChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a message... (use /bot for AI)"
+              disabled={isSending || !isConnected}
+              className="max-h-[200px] min-h-[44px] flex-1 resize-none"
+              rows={1}
+            />
+
+            {/* Send button */}
+            <Button
+              type="submit"
+              disabled={
+                isSending ||
+                !isConnected ||
+                (!newMessage.trim() && uploadedFiles.length === 0)
+              }
+              className="shrink-0"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+
+          <p className="text-muted-foreground mt-2 text-xs">
+            Tip: Use{" "}
+            <code className="bg-muted rounded px-1.5 py-0.5">
+              /bot &lt;message&gt;
+            </code>{" "}
+            to chat with Gemini AI • Press Enter to send, Shift+Enter for new
+            line
+          </p>
         </div>
       </div>
 
-      {/* Message Input */}
-      <div className="shrink-0 border-t p-4">
-        {/* Bot Command Indicator */}
-        {isBotCommand && (
-          <div className="mb-2 flex items-center gap-2 rounded border-l-4 border-l-blue-500 bg-blue-500/10 p-3">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white">
-              <span className="text-xs font-bold">AI</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
-                Ask Gemini AI
-              </p>
-              <p className="text-muted-foreground text-xs">
-                {botCommandPreview || "Type your question..."}
-              </p>
-            </div>
-          </div>
-        )}
+      {/* Chat Info Panel */}
+      {showInfoPanel && chat && user && (
+        <ChatInfoPanel
+          chat={chat}
+          participants={participants}
+          messages={messages}
+          currentUserId={user.id}
+          onClose={() => setShowInfoPanel(false)}
+          onInviteUser={handleInviteUser}
+          onRemoveUser={handleRemoveUser}
+          onLeaveChat={handleLeaveChat}
+          onDeleteChat={handleDeleteChat}
+        />
+      )}
 
-        {/* File attachments preview */}
-        {uploadedFiles.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2">
-            {uploadedFiles.map((file, index) => (
-              <div
-                key={index}
-                className="bg-muted flex items-center gap-2 rounded-md px-3 py-2 text-sm"
-              >
-                <Paperclip className="h-4 w-4" />
-                <span className="max-w-[200px] truncate">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={() => removeFile(index)}
-                  className="hover:bg-muted-foreground/20 rounded p-0.5"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <form onSubmit={sendMessage} className="flex gap-2">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileSelect}
-            className="hidden"
-            accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json"
-          />
-
-          {/* File upload button */}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isSending || !isConnected}
-            className="shrink-0"
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
-
-          {/* Message textarea */}
-          <Textarea
-            ref={textareaRef}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message... (use /bot for AI)"
-            disabled={isSending || !isConnected}
-            className="max-h-[200px] min-h-[44px] flex-1 resize-none"
-            rows={1}
-          />
-
-          {/* Send button */}
-          <Button
-            type="submit"
-            disabled={
-              isSending ||
-              !isConnected ||
-              (!newMessage.trim() && uploadedFiles.length === 0)
-            }
-            className="shrink-0"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
-
-        <p className="text-muted-foreground mt-2 text-xs">
-          Tip: Use{" "}
-          <code className="bg-muted rounded px-1.5 py-0.5">
-            /bot &lt;message&gt;
-          </code>{" "}
-          to chat with Gemini AI • Press Enter to send, Shift+Enter for new line
-        </p>
-      </div>
+      {/* Invite User Dialog */}
+      <InviteUserDialog
+        open={showInviteDialog}
+        onOpenChange={setShowInviteDialog}
+        onInvite={handleInviteSubmit}
+      />
     </div>
   );
 }
