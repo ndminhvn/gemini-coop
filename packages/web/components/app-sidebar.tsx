@@ -151,8 +151,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
       {/* This is the second sidebar */}
       {/* We disable collapsible and let it fill remaining space */}
-      <Sidebar collapsible="none" className="hidden flex-1 md:flex">
-        <SidebarHeader className="gap-3.5 border-b p-4">
+      <Sidebar collapsible="none" className="hidden flex-1 md:flex overflow-hidden">
+        <SidebarHeader className="gap-3.5 border-b p-4 shrink-0">
           <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="text-foreground text-base font-medium">Chats</div>
@@ -193,7 +193,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="overflow-y-auto">
           <SidebarGroup className="px-0">
             <SidebarGroupContent>
               {isLoading ? (
