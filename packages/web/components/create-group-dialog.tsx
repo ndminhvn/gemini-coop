@@ -86,7 +86,7 @@ export function CreateGroupDialog({
             placeholder="Group name (optional)"
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
-            className="bg-muted/50 ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="bg-muted/50 ring-offset-background focus-visible:ring-ring border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
           />
 
           <div
@@ -118,7 +118,7 @@ export function CreateGroupDialog({
               placeholder="Search users by username"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-muted/50 ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring border-0 pl-8 focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="bg-muted/50 ring-offset-background focus-visible:ring-ring border-0 pl-8 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>
 

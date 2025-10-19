@@ -156,4 +156,14 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Subtle placeholder text styling */
+  ::placeholder {
+    @apply text-muted-foreground/40;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-muted-foreground/40;
+  }
 }

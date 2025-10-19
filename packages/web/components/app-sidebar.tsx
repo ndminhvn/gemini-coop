@@ -7,6 +7,8 @@ import { useParams } from "next/navigation";
 
 import { NavUser } from "@/components/nav-user";
 import { CreateGroupDialog } from "@/components/create-group-dialog";
+import { CreateAIChatDialog } from "@/components/create-ai-chat-dialog";
+import { ChatAvatar } from "@/components/chat-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -31,8 +33,9 @@ import { useChats } from "@/contexts/chat-context";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [showCreateGroup, setShowCreateGroup] = React.useState(false);
+  const [showCreateAIChat, setShowCreateAIChat] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const { chats, isLoading, createAIChat } = useChats();
+  const { chats, isLoading } = useChats();
   const { setOpen } = useSidebar();
   const params = useParams();
   const currentChatId = params.chatId as string | undefined;
@@ -42,15 +45,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       chat.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       searchQuery === "",
   );
-
-  const handleCreateAIChat = async () => {
-    try {
-      await createAIChat();
-    } catch (error) {
-      console.error("Failed to create AI chat:", error);
-      alert("Failed to create AI chat. Please try again.");
-    }
-  };
 
   return (
     <Sidebar
@@ -128,7 +122,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Users className="mr-2 h-4 w-4" />
                   Create a new group
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleCreateAIChat}>
+                <DropdownMenuItem onClick={() => setShowCreateAIChat(true)}>
                   <Bot className="mr-2 h-4 w-4" />
                   Chat with AI
                 </DropdownMenuItem>
@@ -137,6 +131,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <CreateGroupDialog
               open={showCreateGroup}
               onOpenChange={setShowCreateGroup}
+            />
+            <CreateAIChatDialog
+              open={showCreateAIChat}
+              onOpenChange={setShowCreateAIChat}
             />
           </div>
           <SidebarInput
@@ -157,23 +155,32 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Link
                     href={`/chat/${chat.id}`}
                     key={chat.id}
-                    className={`hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex flex-col items-start gap-2 border-b p-4 text-sm leading-tight last:border-b-0 ${
+                    className={`hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex items-start gap-3 border-b p-4 text-sm leading-tight last:border-b-0 ${
                       currentChatId === chat.id.toString()
                         ? "bg-sidebar-accent"
                         : ""
                     }`}
                   >
-                    <div className="flex w-full items-center gap-2">
-                      <span className="truncate font-medium">
-                        {chat.name || `Chat #${chat.id}`}
-                      </span>
-                      <span className="text-muted-foreground ml-auto text-xs">
-                        {new Date(chat.created_at).toLocaleDateString()}
+                    <ChatAvatar
+                      name={chat.name}
+                      isAIChat={!chat.is_group && !chat.name}
+                      isGroup={chat.is_group}
+                      size="md"
+                      className="shrink-0"
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium">
+                          {chat.name || "AI Chat"}
+                        </span>
+                        <span className="text-muted-foreground ml-auto shrink-0 text-xs">
+                          {new Date(chat.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <span className="text-muted-foreground text-xs">
+                        {chat.is_group ? "Group chat" : "Direct chat"}
                       </span>
                     </div>
-                    <span className="text-muted-foreground text-xs">
-                      {chat.is_group ? "Group chat" : "Direct chat"}
-                    </span>
                   </Link>
                 ))
               ) : (
