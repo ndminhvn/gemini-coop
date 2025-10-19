@@ -7,6 +7,7 @@ from fastapi import WebSocket
 from typing import Dict, Set
 import json
 import asyncio
+from datetime import datetime, timezone
 
 
 class ConnectionManager:
@@ -130,6 +131,8 @@ class ConnectionManager:
             return ""
 
         full_response = ""
+        # Use current UTC time for streaming messages
+        stream_timestamp = datetime.now(timezone.utc).isoformat()
 
         async for chunk in stream_generator:
             full_response += chunk
@@ -144,7 +147,7 @@ class ConnectionManager:
                     "username": username,
                     "content": full_response,  # Send accumulated content
                     "is_bot": True,
-                    "created_at": "",  # Will be set on completion
+                    "created_at": stream_timestamp,
                 },
             }
 

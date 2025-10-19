@@ -2,14 +2,6 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
@@ -20,6 +12,7 @@ import type { Chat, Message, WSMessage } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
 import { useWebSocket } from "@/contexts/websocket-context";
 import { ChatMessage } from "@/components/chat-message";
+import { ChatAvatar } from "@/components/chat-avatar";
 
 export default function ChatPage() {
   const params = useParams();
@@ -39,6 +32,13 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Check if AI bot is present in this chat (any message from bot)
+  const hasAIBot = messages.some((msg) => msg.is_bot);
+
+  // Detect if user is typing a bot command
+  const isBotCommand = newMessage.startsWith("/bot ");
+  const botCommandPreview = isBotCommand ? newMessage.slice(5).trim() : "";
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -146,7 +146,9 @@ export default function ChatPage() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || isSending || !user || !isConnected) return;
+    if (!newMessage.trim() || isSending || !user || !isConnected) {
+      return;
+    }
 
     setIsSending(true);
     const messageContent = newMessage;
@@ -190,17 +192,26 @@ export default function ChatPage() {
           orientation="vertical"
           className="mr-2 data-[orientation=vertical]:h-4"
         />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/chat">All Chats</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{chat?.name || "Loading..."}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <ChatAvatar
+          name={chat?.name}
+          isAIChat={hasAIBot}
+          isGroup={chat?.is_group}
+          size="md"
+        />
+        <div className="flex flex-col">
+          <h1 className="text-base font-semibold">
+            {chat?.name || "Loading..."}
+          </h1>
+          {hasAIBot && chat?.is_group && (
+            <p className="text-muted-foreground text-xs">Group Chat with AI</p>
+          )}
+          {hasAIBot && !chat?.is_group && (
+            <p className="text-muted-foreground text-xs">AI Assistant</p>
+          )}
+          {!hasAIBot && chat?.is_group && (
+            <p className="text-muted-foreground text-xs">Group Chat</p>
+          )}
+        </div>
       </header>
 
       {/* Messages Area - Scrollable */}
@@ -241,6 +252,23 @@ export default function ChatPage() {
 
       {/* Message Input */}
       <div className="shrink-0 border-t p-4">
+        {/* Bot Command Indicator */}
+        {isBotCommand && (
+          <div className="mb-2 flex items-center gap-2 rounded border-l-4 border-l-blue-500 bg-blue-500/10 p-3">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-500 text-white">
+              <span className="text-xs font-bold">AI</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
+                Ask Gemini AI
+              </p>
+              <p className="text-muted-foreground text-xs">
+                {botCommandPreview || "Type your question..."}
+              </p>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={sendMessage} className="flex gap-2">
           <Input
             value={newMessage}

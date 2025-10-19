@@ -51,6 +51,7 @@ from services.chat.chat_service import (
     create_message,
     get_chat_history_for_gemini,
 )
+from services.chat.bot_service import get_or_create_bot_user, add_bot_to_chat
 from services.gemini.gemini_service import gemini_service
 from services.websocket.websocket_manager import websocket_manager
 
@@ -412,6 +413,10 @@ async def websocket_endpoint(
                 if content.startswith("/bot "):
                     bot_message = content[5:].strip()  # Remove "/bot " prefix
 
+                    # Ensure bot is a participant in this chat
+                    bot_participant = add_bot_to_chat(db, chat_id)
+                    bot_user = get_or_create_bot_user(db)
+
                     # Save user message
                     user_msg = create_message(
                         db, chat_id, content, user.id, is_bot=False
@@ -437,20 +442,45 @@ async def websocket_endpoint(
                     # Get chat history for context
                     history = get_chat_history_for_gemini(db, chat_id, limit=20)
 
-                    # Create placeholder for bot message
-                    bot_msg = create_message(db, chat_id, "", user_id=None, is_bot=True)
-
-                    # Stream Gemini response
-                    stream = gemini_service.generate_stream_response(
-                        bot_message, history
-                    )
-                    full_response = await websocket_manager.stream_to_chat(
-                        chat_id, bot_msg.id, stream
+                    # Create placeholder for bot message with bot user ID
+                    bot_msg = create_message(
+                        db, chat_id, "", user_id=bot_user.id, is_bot=True
                     )
 
-                    # Update bot message with full response
-                    bot_msg.content = full_response
-                    db.commit()
+                    try:
+                        # Stream Gemini response
+                        stream = gemini_service.generate_stream_response(
+                            bot_message, history
+                        )
+                        full_response = await websocket_manager.stream_to_chat(
+                            chat_id, bot_msg.id, stream, username=bot_user.username
+                        )
+
+                        # Update bot message with full response
+                        bot_msg.content = full_response
+                        db.commit()
+                    except Exception as e:
+                        print(f"Error generating bot response: {e}")
+                        # Set error message that's user-friendly
+                        bot_msg.content = "I apologize, but I encountered an error processing your request. Please try again."
+                        db.commit()
+
+                        # Broadcast the error message
+                        await websocket_manager.broadcast_to_chat(
+                            {
+                                "type": "bot_stream",
+                                "message": {
+                                    "id": bot_msg.id,
+                                    "chat_id": chat_id,
+                                    "user_id": bot_user.id,
+                                    "username": bot_user.username,
+                                    "content": bot_msg.content,
+                                    "is_bot": True,
+                                    "created_at": bot_msg.created_at.isoformat(),
+                                },
+                            },
+                            chat_id,
+                        )
 
                 else:
                     # Regular message

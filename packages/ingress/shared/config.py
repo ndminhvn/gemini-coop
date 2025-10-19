@@ -8,15 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # JWT Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
 # Database Configuration
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://gemini_user:gemini_password@localhost:5432/gemini_coop",
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Gemini API Configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
