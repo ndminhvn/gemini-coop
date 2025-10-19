@@ -221,7 +221,7 @@ async def create_chat_endpoint(
                     "created_at": new_chat.created_at.isoformat(),
                     "is_group": new_chat.is_group,
                 },
-                "message": f"You've been added to a new chat by {current_user.username}",
+                "notification": f"You've been added to a new chat by {current_user.username}",
             },
         )
 
@@ -290,7 +290,7 @@ async def invite_to_chat(
                 "created_at": chat.created_at.isoformat(),
                 "is_group": chat.is_group,
             },
-            "message": f"{current_user.username} added you to {chat.name or 'a chat'}",
+            "notification": f"{current_user.username} added you to {chat.name or 'a chat'}",
         },
     )
 
@@ -421,12 +421,15 @@ async def websocket_endpoint(
                     await websocket_manager.broadcast_to_chat(
                         {
                             "type": "message",
-                            "chat_id": chat_id,
-                            "message_id": user_msg.id,
-                            "username": user.username,
-                            "content": content,
-                            "is_bot": False,
-                            "created_at": user_msg.created_at.isoformat(),
+                            "message": {
+                                "id": user_msg.id,
+                                "chat_id": chat_id,
+                                "user_id": user.id,
+                                "username": user.username,
+                                "content": content,
+                                "is_bot": False,
+                                "created_at": user_msg.created_at.isoformat(),
+                            },
                         },
                         chat_id,
                     )
@@ -457,12 +460,15 @@ async def websocket_endpoint(
                     await websocket_manager.broadcast_to_chat(
                         {
                             "type": "message",
-                            "chat_id": chat_id,
-                            "message_id": msg.id,
-                            "username": user.username,
-                            "content": content,
-                            "is_bot": False,
-                            "created_at": msg.created_at.isoformat(),
+                            "message": {
+                                "id": msg.id,
+                                "chat_id": chat_id,
+                                "user_id": user.id,
+                                "username": user.username,
+                                "content": content,
+                                "is_bot": False,
+                                "created_at": msg.created_at.isoformat(),
+                            },
                         },
                         chat_id,
                     )

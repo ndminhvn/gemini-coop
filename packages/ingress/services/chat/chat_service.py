@@ -6,9 +6,17 @@ Handles chat rooms, participants, and messages
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from services.database.models import Chat, ChatParticipant, Message, User
+
+
+def ensure_timezone_aware(dt: datetime) -> datetime:
+    """Ensure datetime is timezone-aware (UTC)"""
+    if dt.tzinfo is None:
+        # Assume naive datetimes are UTC
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def create_chat(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Breadcrumb,
@@ -16,73 +16,169 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
-import type { Chat, Message } from "@/lib/types";
+import type { Chat, Message, WSMessage } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
+import { useWebSocket } from "@/contexts/websocket-context";
 import { ChatMessage } from "@/components/chat-message";
 
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
-  const chatId = params.chatId as string;
   const { user } = useAuth();
+  const {
+    isConnected,
+    sendMessage: sendWSMessage,
+    addMessageHandler,
+  } = useWebSocket();
+  const chatId = params.chatId as string;
 
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    loadChat();
-    loadMessages();
-  }, [chatId]);
+    scrollToBottom();
+  }, [messages]);
 
-  const loadChat = async () => {
-    try {
-      const chatData = await apiClient.get<Chat>(`/api/chats/${chatId}`);
-      setChat(chatData);
-    } catch (error) {
-      console.error("Failed to load chat:", error);
-      router.push("/chat");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Load chat details and messages
+  useEffect(() => {
+    const loadChatData = async () => {
+      try {
+        const [chatData, messagesData] = await Promise.all([
+          apiClient.get<Chat>(`/api/chats/${chatId}`),
+          apiClient.get<Message[]>(`/api/chats/${chatId}/messages`),
+        ]);
+        setChat(chatData);
+        setMessages(messagesData);
+      } catch (error) {
+        console.error("Failed to load chat:", error);
+        router.push("/chat");
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const loadMessages = async () => {
-    try {
-      const messagesData = await apiClient.get<Message[]>(
-        `/api/chats/${chatId}/messages`,
-      );
-      setMessages(messagesData);
-    } catch (error) {
-      console.error("Failed to load messages:", error);
+    loadChatData();
+  }, [chatId, router]);
+
+  // Join chat room when component mounts
+  useEffect(() => {
+    if (isConnected && chatId) {
+      sendWSMessage({
+        type: "join",
+        chat_id: parseInt(chatId),
+      });
     }
-  };
+
+    // Leave chat room on unmount
+    return () => {
+      if (isConnected && chatId) {
+        sendWSMessage({
+          type: "leave",
+          chat_id: parseInt(chatId),
+        });
+      }
+    };
+  }, [isConnected, chatId, sendWSMessage]);
+
+  // Listen for incoming WebSocket messages
+  useEffect(() => {
+    const handleWSMessage = (wsMessage: WSMessage) => {
+      if (wsMessage.type === "message" && wsMessage.message) {
+        // Only add message if it's for this chat
+        if (wsMessage.message.chat_id === parseInt(chatId)) {
+          setMessages((prev) => {
+            // Remove any optimistic messages from the same user with same content
+            // (optimistic messages have negative IDs)
+            const withoutOptimistic = prev.filter(
+              (m) =>
+                !(
+                  m.id < 0 &&
+                  m.user_id === wsMessage.message!.user_id &&
+                  m.content === wsMessage.message!.content
+                ),
+            );
+
+            // Check if real message already exists
+            const exists = withoutOptimistic.some(
+              (m) => m.id === wsMessage.message!.id,
+            );
+            if (exists) {
+              return withoutOptimistic;
+            }
+
+            return [...withoutOptimistic, wsMessage.message!];
+          });
+        }
+      } else if (wsMessage.type === "bot_stream" && wsMessage.message) {
+        // Handle streaming bot responses
+        if (wsMessage.message.chat_id === parseInt(chatId)) {
+          setMessages((prev) => {
+            const lastMessage = prev[prev.length - 1];
+            // If last message is from bot and has same ID, update content
+            if (lastMessage?.id === wsMessage.message!.id) {
+              return [
+                ...prev.slice(0, -1),
+                { ...lastMessage, content: wsMessage.message!.content },
+              ];
+            }
+            // Otherwise add new message
+            return [...prev, wsMessage.message!];
+          });
+        }
+      }
+    };
+
+    // Register message handler
+    const cleanup = addMessageHandler(handleWSMessage);
+
+    return cleanup;
+  }, [chatId, addMessageHandler]);
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || sending || !user) return;
+    if (!newMessage.trim() || isSending || !user || !isConnected) return;
 
-    setSending(true);
+    setIsSending(true);
+    const messageContent = newMessage;
+    setNewMessage(""); // Clear input immediately
+
     try {
-      // TODO: Implement WebSocket message sending
-      // For now, just add to local state
+      // Create optimistic message with negative ID to distinguish from real messages
       const tempMessage: Message = {
-        id: Date.now(),
+        id: -Date.now(), // Negative ID for optimistic messages
         chat_id: parseInt(chatId),
         user_id: user.id,
-        content: newMessage,
+        content: messageContent,
         is_bot: false,
         username: user.username,
         created_at: new Date().toISOString(),
       };
-      setMessages([...messages, tempMessage]);
-      setNewMessage("");
+
+      // Add optimistically to UI
+      setMessages((prev) => [...prev, tempMessage]);
+
+      // Send via WebSocket
+      sendWSMessage({
+        type: "message",
+        chat_id: parseInt(chatId),
+        content: messageContent,
+      });
     } catch (error) {
       console.error("Failed to send message:", error);
+      // Restore message on error
+      setNewMessage(messageContent);
     } finally {
-      setSending(false);
+      setIsSending(false);
     }
   };
 
@@ -109,8 +205,11 @@ export default function ChatPage() {
 
       {/* Messages Area - Scrollable */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-        <div className="flex-1 space-y-2 overflow-y-auto px-2">
-          {loading ? (
+        <div
+          className="flex-1 space-y-2 overflow-y-auto px-2"
+          ref={messagesContainerRef}
+        >
+          {isLoading ? (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
@@ -126,13 +225,16 @@ export default function ChatPage() {
               </p>
             </div>
           ) : (
-            messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isCurrentUser={message.user_id === user?.id}
-              />
-            ))
+            <>
+              {messages.map((message) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isCurrentUser={message.user_id === user?.id}
+                />
+              ))}
+              <div ref={messagesEndRef} />
+            </>
           )}
         </div>
       </div>
@@ -144,10 +246,13 @@ export default function ChatPage() {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message... (use /bot for AI)"
-            disabled={sending}
+            disabled={isSending || !isConnected}
             className="flex-1"
           />
-          <Button type="submit" disabled={sending || !newMessage.trim()}>
+          <Button
+            type="submit"
+            disabled={isSending || !isConnected || !newMessage.trim()}
+          >
             <Send className="h-4 w-4" />
           </Button>
         </form>

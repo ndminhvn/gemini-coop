@@ -14,7 +14,7 @@ export default function ChatLayout({
       <SidebarProvider
         style={
           {
-            "--sidebar-width": "350px",
+            "--sidebar-width": "400px",
           } as React.CSSProperties
         }
       >

@@ -110,7 +110,13 @@ class ConnectionManager:
         for connection in disconnected:
             self.active_connections[chat_id].discard(connection)
 
-    async def stream_to_chat(self, chat_id: int, message_id: int, stream_generator):
+    async def stream_to_chat(
+        self,
+        chat_id: int,
+        message_id: int,
+        stream_generator,
+        username: str = "AI Assistant",
+    ):
         """
         Stream Gemini response to all connections in a chat room
 
@@ -118,9 +124,10 @@ class ConnectionManager:
             chat_id: Chat room ID
             message_id: Message ID for the bot response
             stream_generator: Async generator yielding text chunks
+            username: Username for the bot (default: "AI Assistant")
         """
         if chat_id not in self.active_connections:
-            return
+            return ""
 
         full_response = ""
 
@@ -130,26 +137,20 @@ class ConnectionManager:
             # Broadcast chunk to all connections in the chat
             message = {
                 "type": "bot_stream",
-                "chat_id": chat_id,
-                "message_id": message_id,
-                "chunk": chunk,
-                "is_complete": False,
+                "message": {
+                    "id": message_id,
+                    "chat_id": chat_id,
+                    "user_id": None,
+                    "username": username,
+                    "content": full_response,  # Send accumulated content
+                    "is_bot": True,
+                    "created_at": "",  # Will be set on completion
+                },
             }
 
             await self.broadcast_to_chat(message, chat_id)
             # Small delay to prevent overwhelming clients
             await asyncio.sleep(0.01)
-
-        # Send completion message
-        completion_message = {
-            "type": "bot_stream",
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "chunk": "",
-            "is_complete": True,
-            "full_response": full_response,
-        }
-        await self.broadcast_to_chat(completion_message, chat_id)
 
         return full_response
 

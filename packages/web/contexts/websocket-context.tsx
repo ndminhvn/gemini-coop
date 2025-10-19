@@ -14,6 +14,7 @@ import { WSMessage } from "@/lib/types";
 interface WebSocketContextType {
   isConnected: boolean;
   sendMessage: (message: WSMessage) => void;
+  addMessageHandler: (handler: (message: WSMessage) => void) => () => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
@@ -27,6 +28,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const reconnectAttempts = useRef(0);
+  const messageHandlersRef = useRef<Set<(message: WSMessage) => void>>(
+    new Set(),
+  );
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
@@ -106,6 +110,15 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const handleWebSocketMessage = (message: WSMessage) => {
     console.log("WebSocket message received:", message);
 
+    // Notify all registered handlers
+    messageHandlersRef.current.forEach((handler) => {
+      try {
+        handler(message);
+      } catch (error) {
+        console.error("Error in message handler:", error);
+      }
+    });
+
     switch (message.type) {
       case "chat_created":
       case "chat_invite":
@@ -113,16 +126,15 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         refreshChats();
 
         // Show notification
-        if (message.message) {
-          showNotification("New Chat", message.message);
+        if (message.notification) {
+          showNotification("New Chat", message.notification);
         }
         break;
 
       case "message":
-        // Handle new message (will be used when implementing real-time chat)
-        // For now, just show notification if not in current chat
-        if (message.content && message.username) {
-          showNotification(message.username, message.content);
+        // Show notification if message has content
+        if (message.message?.content && message.message?.username) {
+          showNotification(message.message.username, message.message.content);
         }
         break;
 
@@ -176,9 +188,18 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addMessageHandler = (handler: (message: WSMessage) => void) => {
+    messageHandlersRef.current.add(handler);
+    // Return cleanup function
+    return () => {
+      messageHandlersRef.current.delete(handler);
+    };
+  };
+
   const value: WebSocketContextType = {
     isConnected,
     sendMessage,
+    addMessageHandler,
   };
 
   return (

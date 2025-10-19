@@ -81,8 +81,9 @@ export interface WSMessage {
   full_response?: string;
   is_bot?: boolean;
   created_at?: string;
-  message?: string; // Notification message
+  notification?: string; // Notification message text
   chat?: Chat; // Chat data for invite/create notifications
+  message?: Message; // Full message object for new messages
 }
 
 // API Error type
