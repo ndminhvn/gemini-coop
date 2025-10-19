@@ -56,6 +56,9 @@ class ChatParticipant(Base):
     chat_id = Column(Integer, ForeignKey("chats.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     joined_at = Column(DateTime(timezone=True), default=utc_now)
+    last_read_at = Column(
+        DateTime(timezone=True), default=utc_now
+    )  # Track when user last read messages
 
     # Relationships
     chat = relationship("Chat", back_populates="participants")
@@ -77,3 +80,19 @@ class Message(Base):
     # Relationships
     chat = relationship("Chat", back_populates="messages")
     user = relationship("User", back_populates="messages")
+    read_receipts = relationship(
+        "MessageReadReceipt", back_populates="message", cascade="all, delete-orphan"
+    )
+
+
+class MessageReadReceipt(Base):
+    __tablename__ = "message_read_receipts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    read_at = Column(DateTime(timezone=True), default=utc_now)
+
+    # Relationships
+    message = relationship("Message", back_populates="read_receipts")
+    user = relationship("User")

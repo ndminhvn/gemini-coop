@@ -5,10 +5,16 @@ Handles chat rooms, participants, and messages
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime, timezone
 
-from services.database.models import Chat, ChatParticipant, Message, User
+from services.database.models import (
+    Chat,
+    ChatParticipant,
+    Message,
+    User,
+    MessageReadReceipt,
+)
 
 
 def ensure_timezone_aware(dt: datetime) -> datetime:
@@ -159,3 +165,138 @@ def get_chat_history_for_gemini(
             history.append({'role': 'user', 'parts': [msg.content]})
 
     return history
+
+
+def get_unread_count(db: Session, chat_id: int, user_id: int) -> int:
+    """
+    Get count of unread messages in a chat for a user
+    """
+    # Get user's last_read_at timestamp
+    stmt = select(ChatParticipant).where(
+        ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id
+    )
+    participant = db.execute(stmt).scalar_one_or_none()
+
+    if not participant:
+        return 0
+
+    # Count messages created after last_read_at
+    count_stmt = select(func.count(Message.id)).where(
+        Message.chat_id == chat_id,
+        Message.created_at > participant.last_read_at,
+        Message.user_id != user_id,  # Don't count user's own messages
+    )
+    count = db.execute(count_stmt).scalar()
+
+    return count or 0
+
+
+def mark_chat_as_read(db: Session, chat_id: int, user_id: int) -> bool:
+    """
+    Mark a chat as read for a user by updating last_read_at to current time
+    """
+    stmt = select(ChatParticipant).where(
+        ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id
+    )
+    participant = db.execute(stmt).scalar_one_or_none()
+
+    if not participant:
+        return False
+
+    participant.last_read_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Also create read receipts for all unread messages in this chat
+    mark_messages_as_read(db, chat_id, user_id)
+
+    return True
+
+
+def mark_messages_as_read(db: Session, chat_id: int, user_id: int) -> None:
+    """
+    Mark all messages in a chat as read by a user by creating read receipts
+    """
+    # Get all messages in the chat that don't have a read receipt from this user
+    # and aren't sent by this user
+    stmt = (
+        select(Message)
+        .where(Message.chat_id == chat_id, Message.user_id != user_id)
+        .outerjoin(
+            MessageReadReceipt,
+            (MessageReadReceipt.message_id == Message.id)
+            & (MessageReadReceipt.user_id == user_id),
+        )
+        .where(MessageReadReceipt.id == None)
+    )
+    unread_messages = db.execute(stmt).scalars().all()
+
+    # Create read receipts for all unread messages
+    for message in unread_messages:
+        receipt = MessageReadReceipt(message_id=message.id, user_id=user_id)
+        db.add(receipt)
+
+    db.commit()
+
+
+def get_message_read_receipts(db: Session, message_id: int) -> List[Dict]:
+    """
+    Get all read receipts for a message with user information
+    """
+    stmt = (
+        select(MessageReadReceipt, User)
+        .join(User, MessageReadReceipt.user_id == User.id)
+        .where(MessageReadReceipt.message_id == message_id)
+        .order_by(MessageReadReceipt.read_at.asc())
+    )
+    results = db.execute(stmt).all()
+
+    receipts = []
+    for receipt, user in results:
+        receipts.append(
+            {
+                "user_id": user.id,
+                "username": user.username,
+                "read_at": receipt.read_at,
+            }
+        )
+
+    return receipts
+
+
+def get_chat_read_receipts(db: Session, chat_id: int) -> Dict[int, List[Dict]]:
+    """
+    Get read receipts for all messages in a chat
+    Returns dict mapping message_id -> list of read receipts
+    """
+    # Get all messages in the chat
+    messages_stmt = select(Message).where(Message.chat_id == chat_id)
+    messages = db.execute(messages_stmt).scalars().all()
+
+    # Get all read receipts for these messages
+    message_ids = [msg.id for msg in messages]
+    if not message_ids:
+        return {}
+
+    receipts_stmt = (
+        select(MessageReadReceipt, User)
+        .join(User, MessageReadReceipt.user_id == User.id)
+        .where(MessageReadReceipt.message_id.in_(message_ids))
+        .order_by(MessageReadReceipt.read_at.asc())
+    )
+    results = db.execute(receipts_stmt).all()
+
+    # Organize by message_id
+    receipts_by_message = {}
+    for receipt, user in results:
+        if receipt.message_id not in receipts_by_message:
+            receipts_by_message[receipt.message_id] = []
+
+        receipts_by_message[receipt.message_id].append(
+            {
+                "user_id": user.id,
+                "username": user.username,
+                "read_at": receipt.read_at,
+            }
+        )
+
+    return receipts_by_message

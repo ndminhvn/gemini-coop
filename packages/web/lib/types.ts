@@ -30,6 +30,9 @@ export interface Chat {
   owner_id: number;
   created_at: string;
   is_group: boolean;
+  unread_count?: number; // Optional for backward compatibility
+  last_message?: string | null; // Last message content
+  last_message_time?: string | null; // Last message timestamp
 }
 
 export interface ChatWithParticipants extends Chat {
@@ -48,6 +51,12 @@ export interface InviteUserRequest {
 }
 
 // Message types
+export interface ReadReceipt {
+  user_id: number;
+  username: string;
+  read_at: string;
+}
+
 export interface Message {
   id: number;
   chat_id: number;
@@ -56,6 +65,7 @@ export interface Message {
   is_bot: boolean;
   created_at: string;
   username: string; // Username of the sender (required for display)
+  read_by?: ReadReceipt[]; // Optional array of users who have read this message
 }
 
 // WebSocket message types
@@ -68,7 +78,8 @@ export type WSMessageType =
   | "user_joined"
   | "user_left"
   | "chat_created"
-  | "chat_invite";
+  | "chat_invite"
+  | "read_receipts_updated";
 
 export interface WSMessage {
   type: WSMessageType;
@@ -84,6 +95,7 @@ export interface WSMessage {
   notification?: string; // Notification message text
   chat?: Chat; // Chat data for invite/create notifications
   message?: Message; // Full message object for new messages
+  read_receipts?: Record<number, ReadReceipt[]>; // Read receipts data for read_receipts_updated
 }
 
 // API Error type

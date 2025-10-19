@@ -63,6 +63,12 @@ class ChatResponse(BaseModel):
         from_attributes = True
 
 
+class ChatWithUnreadCount(ChatResponse):
+    unread_count: int = 0
+    last_message: Optional[str] = None
+    last_message_time: Optional[datetime] = None
+
+
 class ChatWithParticipants(ChatResponse):
     participants: List[UserResponse]
 

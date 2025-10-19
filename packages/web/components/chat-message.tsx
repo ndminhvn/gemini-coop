@@ -91,17 +91,24 @@ export function ChatMessage({ message, isCurrentUser }: ChatMessageProps) {
           : "flex-row justify-start",
       )}
     >
-      {/* Avatar */}
-      <div className="shrink-0">
-        <ChatAvatar
-          name={message.username}
-          isAIChat={message.is_bot}
-          size="sm"
-        />
-      </div>
+      {/* Avatar - only show for other users/bot */}
+      {!isCurrentUser && (
+        <div className="shrink-0">
+          <ChatAvatar
+            name={message.username}
+            isAIChat={message.is_bot}
+            size="sm"
+          />
+        </div>
+      )}
 
       {/* Message Content */}
-      <div className="flex max-w-[70%] flex-col gap-1">
+      <div
+        className={cn(
+          "flex flex-col gap-1",
+          isCurrentUser ? "max-w-[70%]" : "max-w-[70%]",
+        )}
+      >
         {/* Username and timestamp */}
         <div
           className={cn(

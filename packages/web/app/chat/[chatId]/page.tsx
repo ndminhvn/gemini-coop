@@ -7,12 +7,13 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
-import { apiClient } from "@/lib/api-client";
-import type { Chat, Message, WSMessage } from "@/lib/types";
+import { chatAPI, apiClient } from "@/lib/api-client";
+import type { Chat, Message, WSMessage, ReadReceipt } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
 import { useWebSocket } from "@/contexts/websocket-context";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatAvatar } from "@/components/chat-avatar";
+import { ReadReceipts } from "@/components/read-receipts";
 
 export default function ChatPage() {
   const params = useParams();
@@ -30,6 +31,9 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [readReceipts, setReadReceipts] = useState<
+    Record<number, ReadReceipt[]>
+  >({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -53,12 +57,22 @@ export default function ChatPage() {
   useEffect(() => {
     const loadChatData = async () => {
       try {
-        const [chatData, messagesData] = await Promise.all([
+        const [chatData, messagesData, receiptsData] = await Promise.all([
           apiClient.get<Chat>(`/api/chats/${chatId}`),
           apiClient.get<Message[]>(`/api/chats/${chatId}/messages`),
+          chatAPI.getReadReceipts(parseInt(chatId)),
         ]);
         setChat(chatData);
         setMessages(messagesData);
+        setReadReceipts(receiptsData);
+
+        // Mark chat as read when opening it
+        try {
+          await chatAPI.markChatAsRead(parseInt(chatId));
+          // Read receipts will be updated via WebSocket broadcast
+        } catch (error) {
+          console.error("Failed to mark chat as read:", error);
+        }
       } catch (error) {
         console.error("Failed to load chat:", error);
         router.push("/chat");
@@ -118,6 +132,16 @@ export default function ChatPage() {
 
             return [...withoutOptimistic, wsMessage.message!];
           });
+
+          // Auto-mark chat as read when receiving a message in the current chat
+          // (user is viewing this chat, so they're reading the new messages)
+          if (wsMessage.message.user_id !== user?.id) {
+            // Only mark as read if it's not our own message
+            chatAPI.markChatAsRead(parseInt(chatId)).catch((error) => {
+              console.error("Failed to auto-mark chat as read:", error);
+            });
+          }
+          // Chat list will be updated by WebSocket context
         }
       } else if (wsMessage.type === "bot_stream" && wsMessage.message) {
         // Handle streaming bot responses
@@ -134,6 +158,14 @@ export default function ChatPage() {
             // Otherwise add new message
             return [...prev, wsMessage.message!];
           });
+        }
+      } else if (
+        wsMessage.type === "read_receipts_updated" &&
+        wsMessage.read_receipts
+      ) {
+        // Handle read receipts updates via WebSocket
+        if (wsMessage.chat_id === parseInt(chatId)) {
+          setReadReceipts(wsMessage.read_receipts);
         }
       }
     };
@@ -175,6 +207,7 @@ export default function ChatPage() {
         chat_id: parseInt(chatId),
         content: messageContent,
       });
+      // Read receipts will be updated automatically via WebSocket when others read
     } catch (error) {
       console.error("Failed to send message:", error);
       // Restore message on error
@@ -237,13 +270,35 @@ export default function ChatPage() {
             </div>
           ) : (
             <>
-              {messages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  isCurrentUser={message.user_id === user?.id}
-                />
-              ))}
+              {messages.map((message, index) => {
+                // Find the last message from current user
+                const lastUserMessageIndex = messages
+                  .map((m, i) => ({ m, i }))
+                  .reverse()
+                  .find(({ m }) => m.user_id === user?.id)?.i;
+
+                const isLastUserMessage = index === lastUserMessageIndex;
+
+                return (
+                  <div key={message.id} className="space-y-0">
+                    <ChatMessage
+                      message={message}
+                      isCurrentUser={message.user_id === user?.id}
+                    />
+                    {/* Show read receipts only on the last message from current user */}
+                    {message.user_id === user?.id &&
+                      isLastUserMessage &&
+                      readReceipts[message.id] && (
+                        <div className="flex justify-end px-2">
+                          <ReadReceipts
+                            receipts={readReceipts[message.id]}
+                            currentUserId={user?.id}
+                          />
+                        </div>
+                      )}
+                  </div>
+                );
+              })}
               <div ref={messagesEndRef} />
             </>
           )}

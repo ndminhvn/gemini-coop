@@ -132,10 +132,18 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         break;
 
       case "message":
+        // Refresh chat list to update last message
+        refreshChats();
+
         // Show notification if message has content
         if (message.message?.content && message.message?.username) {
           showNotification(message.message.username, message.message.content);
         }
+        break;
+
+      case "read_receipts_updated":
+        // Refresh chat list to update unread counts when read receipts change
+        refreshChats();
         break;
 
       case "bot_stream":

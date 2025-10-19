@@ -126,6 +126,30 @@ export const chatAPI = {
     );
     return response.data;
   },
+
+  async markChatAsRead(chatId: number): Promise<{ success: boolean }> {
+    const response = await axiosInstance.post<{ success: boolean }>(
+      `/api/chats/${chatId}/mark-read`,
+    );
+    return response.data;
+  },
+
+  async getReadReceipts(
+    chatId: number,
+  ): Promise<
+    Record<
+      number,
+      Array<{ user_id: number; username: string; read_at: string }>
+    >
+  > {
+    const response = await axiosInstance.get<
+      Record<
+        number,
+        Array<{ user_id: number; username: string; read_at: string }>
+      >
+    >(`/api/chats/${chatId}/read-receipts`);
+    return response.data;
+  },
 };
 
 // ============= WebSocket Helper =============

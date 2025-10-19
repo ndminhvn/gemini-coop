@@ -29,6 +29,7 @@ from services.database.schemas import (
     Token,
     ChatCreate,
     ChatResponse,
+    ChatWithUnreadCount,
     ChatInvite,
     MessageResponse,
 )
@@ -50,6 +51,9 @@ from services.chat.chat_service import (
     get_chat_participants,
     create_message,
     get_chat_history_for_gemini,
+    get_unread_count,
+    mark_chat_as_read,
+    get_chat_read_receipts,
 )
 from services.chat.bot_service import get_or_create_bot_user, add_bot_to_chat
 from services.gemini.gemini_service import gemini_service
@@ -229,12 +233,36 @@ async def create_chat_endpoint(
     return new_chat
 
 
-@app.get("/api/chats", response_model=List[ChatResponse])
+@app.get("/api/chats", response_model=List[ChatWithUnreadCount])
 async def get_my_chats(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Get all chats for current user"""
-    return get_user_chats(db, current_user.id)
+    """Get all chats for current user with unread counts"""
+    chats = get_user_chats(db, current_user.id)
+
+    # Add unread count and last message to each chat
+    chats_with_unread = []
+    for chat in chats:
+        unread_count = get_unread_count(db, chat.id, current_user.id)
+
+        # Get last message for this chat
+        messages = get_chat_messages(db, chat.id, limit=1)
+        last_message = messages[0].content if messages else None
+        last_message_time = messages[0].created_at if messages else None
+
+        chat_dict = {
+            "id": chat.id,
+            "name": chat.name,
+            "owner_id": chat.owner_id,
+            "created_at": chat.created_at,
+            "is_group": chat.is_group,
+            "unread_count": unread_count,
+            "last_message": last_message,
+            "last_message_time": last_message_time,
+        }
+        chats_with_unread.append(chat_dict)
+
+    return chats_with_unread
 
 
 @app.get("/api/chats/{chat_id}", response_model=ChatResponse)
@@ -342,6 +370,66 @@ async def get_participants(
     return get_chat_participants(db, chat_id)
 
 
+@app.post("/api/chats/{chat_id}/mark-read")
+async def mark_as_read(
+    chat_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark a chat as read for the current user"""
+    if not is_participant(db, chat_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    success = mark_chat_as_read(db, chat_id, current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Chat or participant not found")
+
+    # Get updated read receipts and broadcast to all users in the chat
+    receipts = get_chat_read_receipts(db, chat_id)
+
+    # Convert datetime objects to ISO strings for JSON serialization
+    serializable_receipts = {}
+    for message_id, receipt_list in receipts.items():
+        serializable_receipts[message_id] = [
+            {
+                "user_id": r["user_id"],
+                "username": r["username"],
+                "read_at": r["read_at"].isoformat() if r["read_at"] else None,
+            }
+            for r in receipt_list
+        ]
+
+    # Get all participants in the chat
+    participants = get_chat_participants(db, chat_id)
+    participant_ids = [p.id for p in participants]
+
+    # Notify ALL participants (not just those in chat room) to update their sidebar
+    await websocket_manager.notify_users(
+        participant_ids,
+        {
+            "type": "read_receipts_updated",
+            "chat_id": chat_id,
+            "read_receipts": serializable_receipts,
+        },
+    )
+
+    return {"success": True, "message": "Chat marked as read"}
+
+
+@app.get("/api/chats/{chat_id}/read-receipts")
+async def get_read_receipts(
+    chat_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get read receipts for all messages in a chat"""
+    if not is_participant(db, chat_id, current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    receipts = get_chat_read_receipts(db, chat_id)
+    return receipts
+
+
 # ============= WEBSOCKET =============
 
 
@@ -422,8 +510,13 @@ async def websocket_endpoint(
                         db, chat_id, content, user.id, is_bot=False
                     )
 
-                    # Broadcast user message
-                    await websocket_manager.broadcast_to_chat(
+                    # Get all participants to notify them
+                    participants = get_chat_participants(db, chat_id)
+                    participant_ids = [p.id for p in participants]
+
+                    # Notify ALL participants about the user message
+                    await websocket_manager.notify_users(
+                        participant_ids,
                         {
                             "type": "message",
                             "message": {
@@ -436,7 +529,6 @@ async def websocket_endpoint(
                                 "created_at": user_msg.created_at.isoformat(),
                             },
                         },
-                        chat_id,
                     )
 
                     # Get chat history for context
@@ -486,8 +578,13 @@ async def websocket_endpoint(
                     # Regular message
                     msg = create_message(db, chat_id, content, user.id, is_bot=False)
 
-                    # Broadcast message
-                    await websocket_manager.broadcast_to_chat(
+                    # Get all participants to notify them
+                    participants = get_chat_participants(db, chat_id)
+                    participant_ids = [p.id for p in participants]
+
+                    # Notify ALL participants (not just those in the chat room)
+                    await websocket_manager.notify_users(
+                        participant_ids,
                         {
                             "type": "message",
                             "message": {
@@ -500,7 +597,6 @@ async def websocket_endpoint(
                                 "created_at": msg.created_at.isoformat(),
                             },
                         },
-                        chat_id,
                     )
 
             elif message_type == "typing":

@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Command, MessageSquare, SquarePen, Users, Bot } from "lucide-react";
+import {
+  Command,
+  MessageSquare,
+  SquarePen,
+  Users,
+  Bot,
+  Bell,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -11,6 +18,7 @@ import { CreateAIChatDialog } from "@/components/create-ai-chat-dialog";
 import { ChatAvatar } from "@/components/chat-avatar";
 import { WebSocketStatus } from "@/components/websocket-status";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,15 +44,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [showCreateGroup, setShowCreateGroup] = React.useState(false);
   const [showCreateAIChat, setShowCreateAIChat] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [showOnlyUnread, setShowOnlyUnread] = React.useState(false);
   const { chats, isLoading } = useChats();
   const { setOpen } = useSidebar();
   const params = useParams();
   const currentChatId = params.chatId as string | undefined;
 
-  const filteredChats = chats.filter(
-    (chat) =>
+  const filteredChats = chats.filter((chat) => {
+    const matchesSearch =
       chat.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      searchQuery === "",
+      searchQuery === "";
+    const matchesUnread =
+      !showOnlyUnread || (chat.unread_count && chat.unread_count > 0);
+    return matchesSearch && matchesUnread;
+  });
+
+  const totalUnread = chats.reduce(
+    (sum, chat) => sum + (chat.unread_count || 0),
+    0,
   );
 
   return (
@@ -87,11 +104,40 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       children: "All Chats",
                       hidden: false,
                     }}
-                    onClick={() => setOpen(true)}
+                    onClick={() => {
+                      setShowOnlyUnread(false);
+                      setOpen(true);
+                    }}
+                    isActive={!showOnlyUnread}
                     className="px-2.5 md:px-2"
                   >
                     <MessageSquare />
-                    <span>Chats</span>
+                    <span>All Chats</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip={{
+                      children: "Unread Chats",
+                      hidden: false,
+                    }}
+                    onClick={() => {
+                      setShowOnlyUnread(true);
+                      setOpen(true);
+                    }}
+                    isActive={showOnlyUnread}
+                    className="px-2.5 md:px-2"
+                  >
+                    <Bell />
+                    <span>Unread</span>
+                    {totalUnread > 0 && (
+                      <Badge
+                        variant="default"
+                        className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs"
+                      >
+                        {totalUnread}
+                      </Badge>
+                    )}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
@@ -177,12 +223,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <span className="truncate font-medium">
                           {chat.name || "AI Chat"}
                         </span>
-                        <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-                          {new Date(chat.created_at).toLocaleDateString()}
-                        </span>
+                        {chat.unread_count && chat.unread_count > 0 ? (
+                          <Badge
+                            variant="default"
+                            className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold"
+                          >
+                            {chat.unread_count}
+                          </Badge>
+                        ) : chat.last_message_time ? (
+                          <span className="text-muted-foreground ml-auto shrink-0 text-xs">
+                            {new Date(
+                              chat.last_message_time,
+                            ).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground ml-auto shrink-0 text-xs">
+                            {new Date(chat.created_at).toLocaleDateString()}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-muted-foreground text-xs">
-                        {chat.is_group ? "Group chat" : "Direct chat"}
+                      <span className="text-muted-foreground truncate text-xs">
+                        {chat.last_message ||
+                          (chat.is_group ? "Group chat" : "Direct chat")}
                       </span>
                     </div>
                   </Link>
