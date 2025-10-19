@@ -30,6 +30,7 @@ export interface Chat {
   owner_id: number;
   created_at: string;
   is_group: boolean;
+  avatar?: string;
 }
 
 export interface ChatWithParticipants extends Chat {

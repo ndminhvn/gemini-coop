@@ -2,19 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send } from "lucide-react";
+import { Send, MoreVertical } from "lucide-react";
+import { ChatMenu } from "@/components/chat-menu";
 import { apiClient } from "@/lib/api-client";
 import type { Chat, Message, WSMessage } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
@@ -37,6 +31,7 @@ export default function ChatPage() {
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
@@ -182,29 +177,50 @@ export default function ChatPage() {
     }
   };
 
-  return (
-    <div className="flex h-screen flex-col">
-      <header className="bg-background flex shrink-0 items-center gap-2 border-b p-4">
-        <SidebarTrigger className="-ml-1" />
-        <Separator
-          orientation="vertical"
-          className="mr-2 data-[orientation=vertical]:h-4"
-        />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">
-              <BreadcrumbLink href="/chat">All Chats</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{chat?.name || "Loading..."}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </header>
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
-      {/* Messages Area - Scrollable */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+  return (
+    <div className="flex h-screen">
+      {/* Left Panel - Chat Messages */}
+      <div className="flex flex-col flex-1">
+        <header className="bg-background flex shrink-0 items-center gap-3 border-b p-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator
+            orientation="vertical"
+            className="mr-2 data-[orientation=vertical]:h-4"
+          />
+          
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={chat?.avatar} alt={chat?.name || "Chat"} />
+            <AvatarFallback>
+              {chat?.name ? getInitials(chat.name) : "CH"}
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-sm font-medium">
+            {chat?.name || "Loading..."}
+          </span>
+          
+          <div className="ml-auto">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setShowMenu(!showMenu)}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
+
+        {/* Messages Area - Scrollable */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 bg-white">
         <div
           className="flex-1 space-y-2 overflow-y-auto px-2"
           ref={messagesContainerRef}
@@ -240,14 +256,14 @@ export default function ChatPage() {
       </div>
 
       {/* Message Input */}
-      <div className="shrink-0 border-t p-4">
+      <div className="shrink-0 p-4 bg-white border-t">
         <form onSubmit={sendMessage} className="flex gap-2">
           <Input
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message... (use /bot for AI)"
             disabled={isSending || !isConnected}
-            className="flex-1"
+            className="flex-1 border-0 shadow-none focus-visible:ring-1 bg-muted"
           />
           <Button
             type="submit"
@@ -264,6 +280,16 @@ export default function ChatPage() {
           to chat with Gemini AI
         </p>
       </div>
+      </div>
+
+      {/* Right Panel - Chat Menu (slides in) */}
+      <ChatMenu
+        isOpen={showMenu}
+        onClose={() => setShowMenu(false)}
+        chatName={chat?.name || "Chat"}
+        chatAvatar={chat?.avatar}
+        username={chat?.name ? chat.name.toLowerCase().replace(/\s+/g, '') : undefined}
+      />
     </div>
   );
 }
