@@ -48,13 +48,24 @@ export default function ChatPage() {
   const botCommandPreview = isBotCommand ? newMessage.slice(5).trim() : "";
 
   // Auto-scroll to bottom when new messages arrive
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Scroll to bottom when loading completes (after layout is stable)
+  useEffect(() => {
+    if (!isLoading && messages.length > 0) {
+      // Use setTimeout to ensure DOM has fully rendered and textarea has resized
+      const timeoutId = setTimeout(() => {
+        scrollToBottom("auto");
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isLoading, messages.length]);
 
   // Load chat details and messages
   useEffect(() => {
