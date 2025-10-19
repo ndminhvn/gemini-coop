@@ -55,7 +55,7 @@ export interface Message {
   content: string;
   is_bot: boolean;
   created_at: string;
-  username?: string; // For display purposes
+  username: string; // Username of the sender (required for display)
 }
 
 // WebSocket message types

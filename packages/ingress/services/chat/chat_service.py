@@ -4,6 +4,7 @@ Handles chat rooms, participants, and messages
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from typing import List, Optional
 from datetime import datetime
 
@@ -37,27 +38,23 @@ def create_chat(
 
 def get_chat(db: Session, chat_id: int) -> Optional[Chat]:
     """Get a chat by ID"""
-    return db.query(Chat).filter(Chat.id == chat_id).first()
+    stmt = select(Chat).where(Chat.id == chat_id)
+    return db.execute(stmt).scalar_one_or_none()
 
 
 def get_user_chats(db: Session, user_id: int) -> List[Chat]:
     """Get all chats a user is participating in"""
-    return (
-        db.query(Chat)
-        .join(ChatParticipant)
-        .filter(ChatParticipant.user_id == user_id)
-        .all()
-    )
+    stmt = select(Chat).join(ChatParticipant).where(ChatParticipant.user_id == user_id)
+    return db.execute(stmt).scalars().all()
 
 
 def add_participant(db: Session, chat_id: int, user_id: int) -> ChatParticipant:
     """Add a participant to a chat"""
     # Check if participant already exists
-    existing = (
-        db.query(ChatParticipant)
-        .filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id)
-        .first()
+    stmt = select(ChatParticipant).where(
+        ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id
     )
+    existing = db.execute(stmt).scalar_one_or_none()
 
     if existing:
         return existing
@@ -71,22 +68,17 @@ def add_participant(db: Session, chat_id: int, user_id: int) -> ChatParticipant:
 
 def is_participant(db: Session, chat_id: int, user_id: int) -> bool:
     """Check if a user is a participant in a chat"""
-    participant = (
-        db.query(ChatParticipant)
-        .filter(ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id)
-        .first()
+    stmt = select(ChatParticipant).where(
+        ChatParticipant.chat_id == chat_id, ChatParticipant.user_id == user_id
     )
+    participant = db.execute(stmt).scalar_one_or_none()
     return participant is not None
 
 
 def get_chat_participants(db: Session, chat_id: int) -> List[User]:
     """Get all participants in a chat"""
-    return (
-        db.query(User)
-        .join(ChatParticipant)
-        .filter(ChatParticipant.chat_id == chat_id)
-        .all()
-    )
+    stmt = select(User).join(ChatParticipant).where(ChatParticipant.chat_id == chat_id)
+    return db.execute(stmt).scalars().all()
 
 
 def create_message(
@@ -106,13 +98,13 @@ def create_message(
 
 def get_chat_messages(db: Session, chat_id: int, limit: int = 50) -> List[Message]:
     """Get messages from a chat"""
-    return (
-        db.query(Message)
-        .filter(Message.chat_id == chat_id)
+    stmt = (
+        select(Message)
+        .where(Message.chat_id == chat_id)
         .order_by(Message.created_at.desc())
         .limit(limit)
-        .all()
     )
+    return db.execute(stmt).scalars().all()
 
 
 def get_chat_history_for_gemini(
@@ -122,13 +114,13 @@ def get_chat_history_for_gemini(
     Get chat history formatted for Gemini API
     Returns list of messages in format: [{'role': 'user'/'model', 'parts': [text]}]
     """
-    messages = (
-        db.query(Message)
-        .filter(Message.chat_id == chat_id)
+    stmt = (
+        select(Message)
+        .where(Message.chat_id == chat_id)
         .order_by(Message.created_at.asc())
         .limit(limit)
-        .all()
     )
+    messages = db.execute(stmt).scalars().all()
 
     history = []
     for msg in messages:

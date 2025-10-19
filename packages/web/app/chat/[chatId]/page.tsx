@@ -17,11 +17,14 @@ import { Button } from "@/components/ui/button";
 import { Send } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import type { Chat, Message } from "@/lib/types";
+import { useAuth } from "@/contexts/auth-context";
+import { ChatMessage } from "@/components/chat-message";
 
 export default function ChatPage() {
   const params = useParams();
   const router = useRouter();
   const chatId = params.chatId as string;
+  const { user } = useAuth();
 
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -59,7 +62,7 @@ export default function ChatPage() {
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || sending) return;
+    if (!newMessage.trim() || sending || !user) return;
 
     setSending(true);
     try {
@@ -68,10 +71,10 @@ export default function ChatPage() {
       const tempMessage: Message = {
         id: Date.now(),
         chat_id: parseInt(chatId),
-        user_id: null,
+        user_id: user.id,
         content: newMessage,
         is_bot: false,
-        username: "You",
+        username: user.username,
         created_at: new Date().toISOString(),
       };
       setMessages([...messages, tempMessage]);
@@ -106,7 +109,7 @@ export default function ChatPage() {
 
       {/* Messages Area - Scrollable */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-        <div className="flex-1 space-y-4 overflow-y-auto">
+        <div className="flex-1 space-y-2 overflow-y-auto px-2">
           {loading ? (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
@@ -124,21 +127,11 @@ export default function ChatPage() {
             </div>
           ) : (
             messages.map((message) => (
-              <div key={message.id} className="flex flex-col space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-semibold">
-                    {message.username || "Unknown"}
-                  </span>
-                  <span className="text-muted-foreground text-xs">
-                    {new Date(message.created_at).toLocaleTimeString()}
-                  </span>
-                </div>
-                <div
-                  className={`rounded-lg p-3 ${message.is_bot ? "bg-blue-100 dark:bg-blue-900" : "bg-muted"}`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                </div>
-              </div>
+              <ChatMessage
+                key={message.id}
+                message={message}
+                isCurrentUser={message.user_id === user?.id}
+              />
             ))
           )}
         </div>

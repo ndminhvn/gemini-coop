@@ -74,6 +74,13 @@ export const authAPI = {
     const response = await axiosInstance.get<User>("/api/auth/me");
     return response.data;
   },
+
+  async searchUsers(query: string, limit = 10): Promise<User[]> {
+    const response = await axiosInstance.get<User[]>("/api/users/search", {
+      params: { query, limit },
+    });
+    return response.data;
+  },
 };
 
 // ============= Chat API =============

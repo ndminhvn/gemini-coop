@@ -13,7 +13,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useChats } from "@/contexts/chat-context";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { authAPI } from "@/lib/api-client";
+import type { User } from "@/lib/types";
 
 interface CreateGroupDialogProps {
   open: boolean;
@@ -26,24 +28,50 @@ export function CreateGroupDialog({
 }: CreateGroupDialogProps) {
   const [groupName, setGroupName] = React.useState("");
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
+  const [searchResults, setSearchResults] = useState<User[]>([]);
   const [includeAI, setIncludeAI] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const { createChat } = useChats();
   const router = useRouter();
 
-  // TODO: Replace with actual user search API
-  // For now, users would need to type exact usernames
-  const searchResults = searchQuery.length > 0 ? [searchQuery] : [];
-
-  const toggleUser = (username: string) => {
-    const newSelected = new Set(selectedUsers);
-    if (newSelected.has(username)) {
-      newSelected.delete(username);
-    } else {
-      newSelected.add(username);
+  // Debounced user search
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
     }
-    setSelectedUsers(newSelected);
+
+    const searchUsers = async () => {
+      setIsSearching(true);
+      try {
+        const results = await authAPI.searchUsers(searchQuery);
+        // Filter out already selected users
+        const filteredResults = results.filter(
+          (user) => !selectedUsers.some((u) => u.id === user.id),
+        );
+        setSearchResults(filteredResults);
+      } catch (error) {
+        console.error("Failed to search users:", error);
+        // Don't throw error, just show no results
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(searchUsers, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, selectedUsers]);
+
+  const toggleUser = (user: User) => {
+    const isSelected = selectedUsers.some((u) => u.id === user.id);
+    if (isSelected) {
+      setSelectedUsers(selectedUsers.filter((u) => u.id !== user.id));
+    } else {
+      setSelectedUsers([...selectedUsers, user]);
+    }
   };
 
   const handleCreate = async () => {
@@ -52,14 +80,14 @@ export function CreateGroupDialog({
       const newChat = await createChat({
         name: groupName || undefined,
         is_group: true,
-        is_ai_chat: includeAI && selectedUsers.size === 0, // Only AI if no other users
-        participant_usernames: Array.from(selectedUsers),
+        is_ai_chat: includeAI && selectedUsers.length === 0, // Only AI if no other users
+        participant_usernames: selectedUsers.map((u) => u.username),
       });
 
       // Reset form
       setGroupName("");
       setSearchQuery("");
-      setSelectedUsers(new Set());
+      setSelectedUsers([]);
       setIncludeAI(false);
       onOpenChange(false);
 
@@ -115,23 +143,41 @@ export function CreateGroupDialog({
           <div className="relative">
             <Search className="text-muted-foreground absolute top-2.5 left-2 h-4 w-4" />
             <Input
-              placeholder="Search users by username"
+              placeholder="Search users by username or email"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-muted/50 ring-offset-background focus-visible:ring-ring border-0 pl-8 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </div>
 
-          {selectedUsers.size > 0 && (
+          {/* Loading indicator */}
+          {isSearching && searchQuery.length >= 2 && (
+            <div className="text-muted-foreground flex items-center justify-center py-4 text-sm">
+              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              Searching...
+            </div>
+          )}
+
+          {/* No results message */}
+          {!isSearching &&
+            searchQuery.length >= 2 &&
+            searchResults.length === 0 && (
+              <div className="text-muted-foreground flex flex-col items-center justify-center rounded-lg border border-dashed py-6 text-center text-sm">
+                <p className="font-medium">No users found</p>
+                <p className="text-xs">Try searching by username or email</p>
+              </div>
+            )}
+
+          {selectedUsers.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {Array.from(selectedUsers).map((username) => (
+              {selectedUsers.map((user) => (
                 <div
-                  key={username}
+                  key={user.id}
                   className="bg-primary/10 text-primary flex items-center gap-2 rounded-full px-3 py-1 text-sm"
                 >
-                  {username}
+                  {user.username}
                   <button
-                    onClick={() => toggleUser(username)}
+                    onClick={() => toggleUser(user)}
                     className="hover:bg-primary/20 rounded-full p-0.5"
                   >
                     ×
@@ -141,24 +187,28 @@ export function CreateGroupDialog({
             </div>
           )}
 
-          {searchResults.length > 0 && (
+          {/* Search results */}
+          {!isSearching && searchResults.length > 0 && (
             <div className="max-h-[200px] space-y-1 overflow-y-auto">
-              {searchResults.map((username) => (
+              {searchResults.map((user) => (
                 <div
-                  key={username}
+                  key={user.id}
                   onClick={() => {
-                    toggleUser(username);
+                    toggleUser(user);
                     setSearchQuery("");
                   }}
                   className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 rounded-lg p-2"
                 >
                   <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-full">
-                    {username.charAt(0).toUpperCase()}
+                    {user.username.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1">
-                    <div className="font-medium">{username}</div>
+                    <div className="font-medium">{user.username}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {user.email}
+                    </div>
                   </div>
-                  {selectedUsers.has(username) && (
+                  {selectedUsers.some((u) => u.id === user.id) && (
                     <Check className="text-primary h-4 w-4" />
                   )}
                 </div>
@@ -174,7 +224,10 @@ export function CreateGroupDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={isCreating}>
+          <Button
+            onClick={handleCreate}
+            disabled={isCreating || (selectedUsers.length === 0 && !includeAI)}
+          >
             {isCreating ? "Creating..." : "Create"}
           </Button>
         </div>

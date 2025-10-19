@@ -13,6 +13,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from typing import List
 import uvicorn
 from contextlib import asynccontextmanager
@@ -147,6 +148,30 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@app.get("/api/users/search", response_model=List[UserResponse])
+async def search_users(
+    query: str,
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Search users by username or email"""
+    if len(query) < 2:
+        return []
+
+    # Search for users matching the query using SQLAlchemy 2.0 style
+    stmt = (
+        select(User)
+        .where((User.username.ilike(f"%{query}%")) | (User.email.ilike(f"%{query}%")))
+        .where(User.id != current_user.id)  # Exclude current user
+        .limit(limit)
+    )
+    users = db.execute(stmt).scalars().all()
+
+    print(f"Search query: '{query}', Found {len(users)} users")
+    return users
+
+
 # ============= CHAT ROUTES =============
 
 
@@ -248,7 +273,22 @@ async def get_messages(
         raise HTTPException(status_code=403, detail="Not authorized")
 
     messages = get_chat_messages(db, chat_id, limit)
-    return list(reversed(messages))  # Return in chronological order
+
+    # Add username to each message
+    result = []
+    for msg in reversed(messages):  # Return in chronological order
+        msg_dict = {
+            "id": msg.id,
+            "chat_id": msg.chat_id,
+            "user_id": msg.user_id,
+            "content": msg.content,
+            "is_bot": msg.is_bot,
+            "created_at": msg.created_at,
+            "username": msg.user.username if msg.user else "AI Assistant",
+        }
+        result.append(msg_dict)
+
+    return result
 
 
 @app.get("/api/chats/{chat_id}/participants", response_model=List[UserResponse])

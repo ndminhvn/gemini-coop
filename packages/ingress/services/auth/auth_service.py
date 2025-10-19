@@ -8,6 +8,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from services.database.models import User
 from services.database.schemas import UserCreate
@@ -51,7 +52,8 @@ def decode_token(token: str) -> Optional[str]:
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
     """Authenticate a user"""
-    user = db.query(User).filter(User.username == username).first()
+    stmt = select(User).where(User.username == username)
+    user = db.execute(stmt).scalar_one_or_none()
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
@@ -73,9 +75,11 @@ def create_user(db: Session, user: UserCreate) -> User:
 
 def get_user_by_username(db: Session, username: str) -> Optional[User]:
     """Get a user by username"""
-    return db.query(User).filter(User.username == username).first()
+    stmt = select(User).where(User.username == username)
+    return db.execute(stmt).scalar_one_or_none()
 
 
 def get_user_by_email(db: Session, email: str) -> Optional[User]:
     """Get a user by email"""
-    return db.query(User).filter(User.email == email).first()
+    stmt = select(User).where(User.email == email)
+    return db.execute(stmt).scalar_one_or_none()

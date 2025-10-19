@@ -82,6 +82,7 @@ class MessageResponse(MessageBase):
     user_id: Optional[int]
     is_bot: bool
     created_at: datetime
+    username: Optional[str] = None  # Username of the sender
 
     class Config:
         from_attributes = True
