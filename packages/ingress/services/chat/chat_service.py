@@ -4,7 +4,7 @@ Handles chat rooms, participants, and messages
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List, Optional
 from datetime import datetime
 
@@ -43,8 +43,29 @@ def get_chat(db: Session, chat_id: int) -> Optional[Chat]:
 
 
 def get_user_chats(db: Session, user_id: int) -> List[Chat]:
-    """Get all chats a user is participating in"""
-    stmt = select(Chat).join(ChatParticipant).where(ChatParticipant.user_id == user_id)
+    """Get all chats a user is participating in, sorted by most recent activity"""
+    # Subquery to get the latest message timestamp for each chat
+    latest_message_subquery = (
+        select(Message.chat_id, func.max(Message.created_at).label("last_message_at"))
+        .group_by(Message.chat_id)
+        .subquery()
+    )
+
+    # Main query with left join to include chats without messages
+    stmt = (
+        select(Chat)
+        .join(ChatParticipant)
+        .outerjoin(
+            latest_message_subquery, Chat.id == latest_message_subquery.c.chat_id
+        )
+        .where(ChatParticipant.user_id == user_id)
+        .order_by(
+            # Sort by last message time if exists, otherwise by creation time
+            func.coalesce(
+                latest_message_subquery.c.last_message_at, Chat.created_at
+            ).desc()
+        )
+    )
     return db.execute(stmt).scalars().all()
 
 

@@ -48,7 +48,7 @@ export function ChatAvatar({
 
   return (
     <div
-      className={`${sizeClasses[size]} ${className} flex items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-orange-500 font-semibold text-white`}
+      className={`${sizeClasses[size]} ${className} bg-muted text-foreground flex items-center justify-center rounded-full font-semibold`}
     >
       {getInitials(name)}
     </div>

@@ -66,11 +66,13 @@ export type WSMessageType =
   | "typing"
   | "bot_stream"
   | "user_joined"
-  | "user_left";
+  | "user_left"
+  | "chat_created"
+  | "chat_invite";
 
 export interface WSMessage {
   type: WSMessageType;
-  chat_id: number;
+  chat_id?: number;
   content?: string;
   username?: string;
   message_id?: number;
@@ -79,6 +81,8 @@ export interface WSMessage {
   full_response?: string;
   is_bot?: boolean;
   created_at?: string;
+  message?: string; // Notification message
+  chat?: Chat; // Chat data for invite/create notifications
 }
 
 // API Error type

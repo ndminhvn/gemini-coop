@@ -187,12 +187,16 @@ async def create_chat_endpoint(
         db, current_user.id, chat.name, chat.is_group, chat.is_ai_chat
     )
 
+    # Collect all participant user IDs for notifications
+    participant_ids = []
+
     # Add additional participants if provided
     if chat.participant_usernames:
         for username in chat.participant_usernames:
             invited_user = get_user_by_username(db, username)
             if invited_user:
                 add_participant(db, new_chat.id, invited_user.id)
+                participant_ids.append(invited_user.id)
 
     # If it's an AI chat, send an initial greeting message
     if chat.is_ai_chat:
@@ -202,6 +206,23 @@ async def create_chat_endpoint(
             content="Hello! I'm your AI assistant. How can I help you today?",
             user_id=None,
             is_bot=True,
+        )
+
+    # Notify all invited users about the new chat
+    if participant_ids:
+        await websocket_manager.notify_users(
+            participant_ids,
+            {
+                "type": "chat_created",
+                "chat": {
+                    "id": new_chat.id,
+                    "name": new_chat.name,
+                    "owner_id": new_chat.owner_id,
+                    "created_at": new_chat.created_at.isoformat(),
+                    "is_group": new_chat.is_group,
+                },
+                "message": f"You've been added to a new chat by {current_user.username}",
+            },
         )
 
     return new_chat
@@ -256,6 +277,22 @@ async def invite_to_chat(
 
     # Add participant
     add_participant(db, chat_id, invited_user.id)
+
+    # Notify the invited user
+    await websocket_manager.notify_user(
+        invited_user.id,
+        {
+            "type": "chat_invite",
+            "chat": {
+                "id": chat.id,
+                "name": chat.name,
+                "owner_id": chat.owner_id,
+                "created_at": chat.created_at.isoformat(),
+                "is_group": chat.is_group,
+            },
+            "message": f"{current_user.username} added you to {chat.name or 'a chat'}",
+        },
+    )
 
     return {"message": f"User {invite.username} invited to chat"}
 

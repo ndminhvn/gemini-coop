@@ -9,6 +9,7 @@ import { NavUser } from "@/components/nav-user";
 import { CreateGroupDialog } from "@/components/create-group-dialog";
 import { CreateAIChatDialog } from "@/components/create-ai-chat-dialog";
 import { ChatAvatar } from "@/components/chat-avatar";
+import { WebSocketStatus } from "@/components/websocket-status";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -107,7 +108,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <Sidebar collapsible="none" className="hidden flex-1 md:flex">
         <SidebarHeader className="gap-3.5 border-b p-4">
           <div className="flex w-full items-center justify-between">
-            <div className="text-foreground text-base font-medium">Chats</div>
+            <div className="flex items-center gap-2">
+              <div className="text-foreground text-base font-medium">Chats</div>
+              <WebSocketStatus />
+            </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
