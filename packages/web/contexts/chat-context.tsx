@@ -10,6 +10,7 @@ interface ChatContextType {
   chats: Chat[];
   isLoading: boolean;
   refreshChats: () => Promise<void>;
+  updateChat: (chatId: number, updates: Partial<Chat>) => void;
   createChat: (data: CreateChatRequest) => Promise<Chat>;
   createAIChat: () => Promise<Chat>;
 }
@@ -19,6 +20,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { isAuthenticated } = useAuth();
   const router = useRouter();
 
@@ -31,13 +33,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const refreshChats = async () => {
     try {
-      setIsLoading(true);
+      // Only set loading state on initial load to prevent flickering
+      if (isInitialLoad) {
+        setIsLoading(true);
+      }
       const fetchedChats = await chatAPI.getChats();
       setChats(fetchedChats);
     } catch (error) {
       console.error("Failed to load chats:", error);
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad) {
+        setIsLoading(false);
+        setIsInitialLoad(false);
+      }
     }
   };
 
@@ -50,6 +58,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to create chat:", error);
       throw error;
     }
+  };
+
+  const updateChat = (chatId: number, updates: Partial<Chat>) => {
+    setChats((prevChats) => {
+      const updatedChats = prevChats.map((chat) =>
+        chat.id === chatId ? { ...chat, ...updates } : chat,
+      );
+      // Sort by last_message_time or created_at to maintain proper order
+      return updatedChats.sort((a, b) => {
+        const timeA = a.last_message_time || a.created_at;
+        const timeB = b.last_message_time || b.created_at;
+        return new Date(timeB).getTime() - new Date(timeA).getTime();
+      });
+    });
   };
 
   const createAIChat = async (): Promise<Chat> => {
@@ -67,6 +89,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     chats,
     isLoading,
     refreshChats,
+    updateChat,
     createChat,
     createAIChat,
   };

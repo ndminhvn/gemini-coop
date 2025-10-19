@@ -4,9 +4,9 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Send } from "lucide-react";
+import { Send, Paperclip, X } from "lucide-react";
 import { chatAPI, apiClient } from "@/lib/api-client";
 import type { Chat, Message, WSMessage, ReadReceipt } from "@/lib/types";
 import { useAuth } from "@/contexts/auth-context";
@@ -34,8 +34,11 @@ export default function ChatPage() {
   const [readReceipts, setReadReceipts] = useState<
     Record<number, ReadReceipt[]>
   >({});
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Check if AI bot is present in this chat (any message from bot)
   const hasAIBot = messages.some((msg) => msg.is_bot);
@@ -176,23 +179,63 @@ export default function ChatPage() {
     return cleanup;
   }, [chatId, addMessageHandler]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const newFiles = Array.from(files);
+      setUploadedFiles((prev) => [...prev, ...newFiles]);
+    }
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Enter (without Shift)
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(e as any);
+    }
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || isSending || !user || !isConnected) {
+    if (
+      (!newMessage.trim() && uploadedFiles.length === 0) ||
+      isSending ||
+      !user ||
+      !isConnected
+    ) {
       return;
     }
 
     setIsSending(true);
     const messageContent = newMessage;
+    const filesToSend = [...uploadedFiles];
     setNewMessage(""); // Clear input immediately
+    setUploadedFiles([]); // Clear files
 
     try {
+      // Build message content with file information
+      let fullContent = messageContent;
+      if (filesToSend.length > 0) {
+        const fileNames = filesToSend.map((f) => f.name).join(", ");
+        fullContent = messageContent
+          ? `${messageContent}\n\n📎 Attached files: ${fileNames}`
+          : `📎 Attached files: ${fileNames}`;
+      }
+
       // Create optimistic message with negative ID to distinguish from real messages
       const tempMessage: Message = {
         id: -Date.now(), // Negative ID for optimistic messages
         chat_id: parseInt(chatId),
         user_id: user.id,
-        content: messageContent,
+        content: fullContent,
         is_bot: false,
         username: user.username,
         created_at: new Date().toISOString(),
@@ -205,13 +248,14 @@ export default function ChatPage() {
       sendWSMessage({
         type: "message",
         chat_id: parseInt(chatId),
-        content: messageContent,
+        content: fullContent,
       });
       // Read receipts will be updated automatically via WebSocket when others read
     } catch (error) {
       console.error("Failed to send message:", error);
       // Restore message on error
       setNewMessage(messageContent);
+      setUploadedFiles(filesToSend);
     } finally {
       setIsSending(false);
     }
@@ -324,27 +368,83 @@ export default function ChatPage() {
           </div>
         )}
 
+        {/* File attachments preview */}
+        {uploadedFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {uploadedFiles.map((file, index) => (
+              <div
+                key={index}
+                className="bg-muted flex items-center gap-2 rounded-md px-3 py-2 text-sm"
+              >
+                <Paperclip className="h-4 w-4" />
+                <span className="max-w-[200px] truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(index)}
+                  className="hover:bg-muted-foreground/20 rounded p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={sendMessage} className="flex gap-2">
-          <Input
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+            accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json"
+          />
+
+          {/* File upload button */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isSending || !isConnected}
+            className="shrink-0"
+          >
+            <Paperclip className="h-4 w-4" />
+          </Button>
+
+          {/* Message textarea */}
+          <Textarea
+            ref={textareaRef}
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Type a message... (use /bot for AI)"
             disabled={isSending || !isConnected}
-            className="flex-1"
+            className="max-h-[200px] min-h-[44px] flex-1 resize-none"
+            rows={1}
           />
+
+          {/* Send button */}
           <Button
             type="submit"
-            disabled={isSending || !isConnected || !newMessage.trim()}
+            disabled={
+              isSending ||
+              !isConnected ||
+              (!newMessage.trim() && uploadedFiles.length === 0)
+            }
+            className="shrink-0"
           >
             <Send className="h-4 w-4" />
           </Button>
         </form>
+
         <p className="text-muted-foreground mt-2 text-xs">
           Tip: Use{" "}
           <code className="bg-muted rounded px-1.5 py-0.5">
             /bot &lt;message&gt;
           </code>{" "}
-          to chat with Gemini AI
+          to chat with Gemini AI • Press Enter to send, Shift+Enter for new line
         </p>
       </div>
     </div>

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import { useAuth } from "./auth-context";
 import { useChats } from "./chat-context";
+import { chatAPI } from "@/lib/api-client";
 import { WSMessage } from "@/lib/types";
 
 interface WebSocketContextType {
@@ -23,7 +24,7 @@ const WebSocketContext = createContext<WebSocketContextType | undefined>(
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const { token, isAuthenticated } = useAuth();
-  const { refreshChats } = useChats();
+  const { refreshChats, updateChat } = useChats();
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -107,6 +108,19 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isAuthenticated, token]);
 
+  const fetchAndUpdateSingleChat = async (chatId: number) => {
+    try {
+      // Fetch all chats to get the updated unread count for the specific chat
+      const allChats = await chatAPI.getChats();
+      const updatedChat = allChats.find((c) => c.id === chatId);
+      if (updatedChat) {
+        updateChat(chatId, updatedChat);
+      }
+    } catch (error) {
+      console.error("Failed to fetch single chat update:", error);
+    }
+  };
+
   const handleWebSocketMessage = (message: WSMessage) => {
     console.log("WebSocket message received:", message);
 
@@ -122,7 +136,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     switch (message.type) {
       case "chat_created":
       case "chat_invite":
-        // Refresh chat list when invited to a new chat
+        // Refresh chat list when invited to a new chat (need full refresh for new chat)
         refreshChats();
 
         // Show notification
@@ -132,8 +146,25 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         break;
 
       case "message":
-        // Refresh chat list to update last message
-        refreshChats();
+        // Update chat locally without full refresh to prevent flickering
+        if (message.message?.chat_id) {
+          // Check if user is currently viewing this chat
+          const isViewingChat =
+            window.location.pathname === `/chat/${message.message.chat_id}`;
+
+          // If not viewing, we need to fetch the updated chat to get the correct unread count
+          // If viewing, just update the last message without changing unread count
+          if (isViewingChat) {
+            // User is viewing this chat, don't increment unread count
+            updateChat(message.message.chat_id, {
+              last_message: message.message.content,
+              last_message_time: message.message.created_at,
+            });
+          } else {
+            // User is NOT viewing this chat, fetch updated data to get new unread count
+            fetchAndUpdateSingleChat(message.message.chat_id);
+          }
+        }
 
         // Show notification if message has content
         if (message.message?.content && message.message?.username) {
@@ -142,8 +173,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         break;
 
       case "read_receipts_updated":
-        // Refresh chat list to update unread counts when read receipts change
-        refreshChats();
+        // Fetch updated chat data to get new unread count without full refresh
+        // This is more efficient than refreshing all chats
+        if (message.chat_id) {
+          fetchAndUpdateSingleChat(message.chat_id);
+        }
         break;
 
       case "bot_stream":
