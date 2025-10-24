@@ -191,10 +191,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-MIT
-
-## 🙏 Acknowledgments
-
-- Google Gemini API for AI capabilities
-- shadcn/ui for beautiful UI components
-- FastAPI for the excellent Python framework
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
